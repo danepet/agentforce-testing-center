@@ -17,6 +17,7 @@ requests==2.31.0
 beautifulsoup4==4.12.2
 lxml==4.9.3
 uuid==1.30
+playwright==1.42.0
 
 # Data validation and processing
 deepeval==0.9.1

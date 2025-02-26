@@ -1,12 +1,12 @@
 import re
 import json
 import logging
-from deepeval import evaluate
 from deepeval.metrics import (
     AnswerRelevancyMetric,
     ContextualRelevancyMetric,
     FaithfulnessMetric
 )
+from deepeval.test_case import LLMTestCase
 
 logger = logging.getLogger(__name__)
 
@@ -114,18 +114,28 @@ class ResponseValidator:
             dict: Validation result
         """
         try:
-            metric = AnswerRelevancyMetric(threshold=threshold)
-            result = evaluate(
-                metric=metric,
-                generated_text=response,
-                input=question
+            # Create a test case
+            test_case = LLMTestCase(
+                input=question,
+                actual_output=response
             )
+            
+            # Create the metric with the threshold
+            metric = AnswerRelevancyMetric(threshold=threshold)
+            
+            # Measure using the test case
+            metric.measure(test_case)
+            
+            # Get results
+            passed = metric.is_successful()
+            score = metric.score
+            reason = metric.reason
             
             return {
                 'type': 'answer_relevancy',
-                'passed': result.passed,
-                'score': result.score,
-                'details': result.reason
+                'passed': passed,
+                'score': score,
+                'details': reason if reason else "Evaluation completed"
             }
         except Exception as e:
             logger.error(f"Failed to evaluate answer relevancy: {str(e)}")
@@ -148,18 +158,30 @@ class ResponseValidator:
             dict: Validation result
         """
         try:
-            metric = ContextualRelevancyMetric(threshold=threshold)
-            result = evaluate(
-                metric=metric,
-                generated_text=response,
-                context=context
+            # Create a test case
+            # For context, we need to provide it as a list
+            test_case = LLMTestCase(
+                input="",  # Empty input as we're just testing contextual relevance
+                actual_output=response,
+                retrieval_context=[context]
             )
+            
+            # Create metric
+            metric = ContextualRelevancyMetric(threshold=threshold)
+            
+            # Measure using the test case
+            metric.measure(test_case)
+            
+            # Get results
+            passed = metric.is_successful()
+            score = metric.score
+            reason = metric.reason
             
             return {
                 'type': 'contextual_relevancy',
-                'passed': result.passed,
-                'score': result.score,
-                'details': result.reason
+                'passed': passed,
+                'score': score,
+                'details': reason if reason else "Evaluation completed"
             }
         except Exception as e:
             logger.error(f"Failed to evaluate contextual relevancy: {str(e)}")
@@ -171,7 +193,7 @@ class ResponseValidator:
             }
     
     def validate_faithfulness(self, response, context, threshold=0.7):
-        """Check if response is faithful to the context.
+        """Check if response is faithful to the context (factually consistent).
         
         Args:
             response (str): AI Agent response
@@ -182,18 +204,29 @@ class ResponseValidator:
             dict: Validation result
         """
         try:
-            metric = FaithfulnessMetric(threshold=threshold)
-            result = evaluate(
-                metric=metric,
-                generated_text=response,
-                context=context
+            # Create a test case
+            test_case = LLMTestCase(
+                input="",  # Empty input as we're just testing faithfulness
+                actual_output=response,
+                retrieval_context=[context]
             )
+            
+            # Create the metric
+            metric = FaithfulnessMetric(threshold=threshold)
+            
+            # Measure using the test case
+            metric.measure(test_case)
+            
+            # Get results
+            passed = metric.is_successful()
+            score = metric.score
+            reason = metric.reason
             
             return {
                 'type': 'faithfulness',
-                'passed': result.passed,
-                'score': result.score,
-                'details': result.reason
+                'passed': passed,
+                'score': score,
+                'details': reason if reason else "Evaluation completed"
             }
         except Exception as e:
             logger.error(f"Failed to evaluate faithfulness: {str(e)}")
@@ -239,13 +272,13 @@ class ResponseValidator:
                 parameters.get('question', ''),
                 parameters.get('threshold', 0.7)
             )
-        elif validation_type == 'contextual_relevancy':
+        elif validation_type == 'contextual_relevance' or validation_type == 'contextual_relevancy':
             return self.validate_contextual_relevancy(
                 response,
                 parameters.get('context', ''),
                 parameters.get('threshold', 0.7)
             )
-        elif validation_type == 'faithfulness':
+        elif validation_type == 'factual_consistency' or validation_type == 'faithfulness':
             return self.validate_faithfulness(
                 response,
                 parameters.get('context', ''),

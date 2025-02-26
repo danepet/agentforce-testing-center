@@ -19,7 +19,17 @@ class WebScraper:
         self.user_agent = user_agent
         self.timeout = timeout
         self.headers = {
-            'User-Agent': self.user_agent
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0'
         }
     
     def extract_urls(self, text):
@@ -31,10 +41,22 @@ class WebScraper:
         Returns:
             list: List of extracted URLs
         """
-        # URL regex pattern to match most common URL formats
-        url_pattern = r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+(?:/[^"\s<>]*)?'
-        urls = re.findall(url_pattern, text)
-        return urls
+        # This regex finds URLs starting with http or https and continues until it finds
+        # invalid URL characters, but is careful not to include trailing punctuation
+        url_pattern = r'https?://[^\s()<>[\]{}]+(?:\.[^\s()<>[\]{}]+)+(?:/[^\s()<>[\]{}.,;:\'\"!?]*)*'
+        
+        # Find all potential URLs
+        potential_urls = re.findall(url_pattern, text)
+        
+        # Clean up the URLs to remove trailing punctuation
+        cleaned_urls = []
+        for url in potential_urls:
+            # Remove trailing punctuation like ., ), ], }, etc.
+            while url and url[-1] in '.,;:!?)]}\'\"':
+                url = url[:-1]
+            cleaned_urls.append(url)
+        
+        return cleaned_urls
     
     def scrape_url(self, url):
         """Scrape content from a URL.
@@ -90,6 +112,23 @@ class WebScraper:
                 'content': clean_text
             }
             
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 403:
+                logger.warning(f"Access forbidden for URL {url}. The website may be blocking scrapers.")
+                return {
+                    'url': url,
+                    'success': False,
+                    'error': "Access forbidden (403). Website may be blocking scrapers.",
+                    'content': None
+                }
+            else:
+                logger.error(f"Failed to scrape URL {url}: {str(e)}")
+                return {
+                    'url': url,
+                    'success': False,
+                    'error': str(e),
+                    'content': None
+                }
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to scrape URL {url}: {str(e)}")
             return {

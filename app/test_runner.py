@@ -6,6 +6,7 @@ from app import db
 from app.models import TestCase, TestRun, TurnResult, ValidationResult, ConversationTurn, ExpectedValidation
 from app.agent_connector import AgentConnector, AgentConfig, extract_response_text
 from app.scraper import WebScraper
+from app.browser_scraper import BrowserScraper
 from app.validator import ResponseValidator
 
 logger = logging.getLogger(__name__)
@@ -17,26 +18,68 @@ class TestRunner:
         """Initialize the test runner.
         
         Args:
-            config: Application configuration
+            config: Application configuration dictionary
         """
         self.config = config
         
-        # Create AgentConfig from application config
+        # Create AgentConfig from application config - use dictionary-style access
         agent_config = AgentConfig(
-            sf_org_domain=config.SF_ORG_DOMAIN,
-            client_id=config.SF_CLIENT_ID,
-            client_secret=config.SF_CLIENT_SECRET,
-            agent_id=config.SF_AGENT_ID
+            sf_org_domain=config.get('SF_ORG_DOMAIN', ''),
+            client_id=config.get('SF_CLIENT_ID', ''),
+            client_secret=config.get('SF_CLIENT_SECRET', ''),
+            agent_id=config.get('SF_AGENT_ID', '')
         )
         
         self.agent_connector = AgentConnector(config=agent_config)
+        
+        # Initialize both regular and browser scrapers
         self.scraper = WebScraper(
-            user_agent=config.USER_AGENT,
-            timeout=config.REQUEST_TIMEOUT
+            user_agent=config.get('USER_AGENT', 'Mozilla/5.0'),
+            timeout=config.get('REQUEST_TIMEOUT', 10)
         )
+        self.browser_scraper = BrowserScraper()
+        
+        # List of domains that need browser-based scraping
+        self.problematic_domains = [
+            'liquidweb.com',
+            'cloudflare.com',
+            # Add other domains that block regular scraping
+        ]
+        
         self.validator = ResponseValidator(
-            api_key=config.DEEPEVAL_API_KEY
+            api_key=config.get('DEEPEVAL_API_KEY', '')
         )
+    
+    def scrape_urls(self, urls):
+        """Scrape content from multiple URLs, using the appropriate scraper for each domain.
+        
+        Args:
+            urls (list): List of URLs to scrape
+            
+        Returns:
+            dict: Dictionary mapping URLs to their scraped content
+        """
+        results = {}
+        
+        for url in urls:
+            try:
+                # Check if domain is in problematic list
+                if any(domain in url for domain in self.problematic_domains):
+                    logger.info(f"Using browser scraper for potentially protected domain: {url}")
+                    results[url] = self.browser_scraper.scrape_url(url)
+                else:
+                    # Use regular scraper for other domains
+                    results[url] = self.scraper.scrape_url(url)
+            except Exception as e:
+                logger.error(f"Error scraping URL {url}: {str(e)}")
+                results[url] = {
+                    'url': url,
+                    'success': False,
+                    'error': str(e),
+                    'content': None
+                }
+        
+        return results
     
     def run_test(self, test_case_id):
         """Run a test case.
@@ -95,7 +138,9 @@ class TestRunner:
                 # Scrape URLs if found
                 if urls:
                     try:
-                        scrape_results = self.scraper.scrape_multiple_urls(urls)
+                        # Use the new scrape_urls method that handles problematic domains
+                        scrape_results = self.scrape_urls(urls)
+                        
                         # Combine scraped content for validation
                         scraped_texts = []
                         for url, result in scrape_results.items():
@@ -127,7 +172,7 @@ class TestRunner:
                     parameters = validation.get_parameters()
                     
                     # Add scraped content to context if available
-                    if scraped_content and validation_type in ['factual_consistency', 'contextual_relevance']:
+                    if scraped_content and validation_type in ['factual_consistency', 'contextual_relevance', 'faithfulness']:
                         if 'context' in parameters:
                             parameters['context'] = f"{parameters['context']}\n\n{scraped_content}"
                         else:
