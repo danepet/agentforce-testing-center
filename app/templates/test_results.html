@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}Test Results - AI Agent Testing Center{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h2 class="mb-0">
+            <i class="fas fa-chart-bar text-primary me-2"></i>
+            Test Results
+        </h2>
+        <div>
+            <a href="{{ url_for('main.export_test_results', test_run_id=test_run.id) }}" class="btn btn-outline-primary">
+                <i class="fas fa-file-csv me-1"></i> Export to CSV
+            </a>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <h4>Test Case</h4>
+                <p>
+                    <a href="{{ url_for('main.view_test', test_id=test_run.test_case_id) }}">
+                        {{ results.test_case_name }}
+                    </a>
+                </p>
+                
+                <h4>Status</h4>
+                <p>
+                    {% if test_run.status == 'running' %}
+                        <span class="badge bg-warning">Running</span>
+                    {% elif test_run.status == 'completed' %}
+                        <span class="badge bg-success">Completed</span>
+                    {% elif test_run.status == 'failed' %}
+                        <span class="badge bg-danger">Failed</span>
+                    {% else %}
+                        <span class="badge bg-secondary">{{ test_run.status }}</span>
+                    {% endif %}
+                </p>
+                
+                <h4>Started</h4>
+                <p>{{ results.started_at }}</p>
+                
+                <h4>Completed</h4>
+                <p>{{ results.completed_at or '-' }}</p>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="mb-0">Overall Results</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-md-4 mb-3">
+                                <h5>Pass Rate</h5>
+                                <div class="display-6">{{ "%.1f"|format(results.pass_percentage) }}%</div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <h5>Passed</h5>
+                                <div class="display-6 text-success">{{ results.validation_counts.passed }}</div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <h5>Failed</h5>
+                                <div class="display-6 text-danger">{{ results.validation_counts.failed }}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="progress mt-3" style="height: 25px;">
+                            {% set pass_pct = results.validation_counts.passed / results.validation_counts.total * 100 %}
+                            {% set fail_pct = results.validation_counts.failed / results.validation_counts.total * 100 %}
+                            <div class="progress-bar bg-success" role="progressbar" style="width: {{ pass_pct }}%">
+                                {{ results.validation_counts.passed }} Passed
+                            </div>
+                            <div class="progress-bar bg-danger" role="progressbar" style="width: {{ fail_pct }}%">
+                                {{ results.validation_counts.failed }} Failed
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <h3 class="mt-4 mb-3">Conversation Results</h3>
+        
+        <div class="accordion" id="turnAccordion">
+            {% for turn in results.turns %}
+                <div class="accordion-item mb-3 border {% if turn.passed %}border-success{% else %}border-danger{% endif %}">
+                    <h2 class="accordion-header" id="turn{{ loop.index }}Heading">
+                        <button class="accordion-button {% if not loop.first %}collapsed{% endif %}" type="button" 
+                                data-bs-toggle="collapse" data-bs-target="#turn{{ loop.index }}Collapse">
+                            <div class="d-flex justify-content-between w-100 me-3">
+                                <span>
+                                    <i class="fas {% if turn.passed %}fa-check-circle text-success{% else %}fa-times-circle text-danger{% endif %} me-2"></i>
+                                    Turn {{ turn.order }} - User Input
+                                </span>
+                                <span class="badge {% if turn.passed %}bg-success{% else %}bg-danger{% endif %}">
+                                    {% if turn.passed %}Passed{% else %}Failed{% endif %}
+                                </span>
+                            </div>
+                        </button>
+                    </h2>
+                    <div id="turn{{ loop.index }}Collapse" class="accordion-collapse collapse {% if loop.first %}show{% endif %}" 
+                         aria-labelledby="turn{{ loop.index }}Heading" data-bs-parent="#turnAccordion">
+                        <div class="accordion-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card mb-3">
+                                        <div class="card-header bg-light">
+                                            <h5 class="mb-0">User Input</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <p>{{ turn.user_input }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="card mb-3">
+                                        <div class="card-header bg-light">
+                                            <h5 class="mb-0">Agent Response</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <p>{{ turn.agent_response }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {% if turn.scraped_content %}
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light">
+                                        <h5 class="mb-0">Scraped Content</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="small text-muted mb-2">Content scraped from URLs in the agent response:</div>
+                                        <pre class="bg-light p-3"><code>{{ turn.scraped_content }}</code></pre>
+                                    </div>
+                                </div>
+                            {% endif %}
+                            
+                            <h5 class="mt-4 mb-3">Validations</h5>
+                            
+                            {% if turn.validations %}
+                                <div class="table-responsive">
+                                    <table class="table table-bordered">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Type</th>
+                                                <th>Parameters</th>
+                                                <th>Result</th>
+                                                <th>Score</th>
+                                                <th>Details</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for validation in turn.validations %}
+                                                <tr class="{% if validation.passed %}table-success{% else %}table-danger{% endif %}">
+                                                    <td>{{ validation.type }}</td>
+                                                    <td>
+                                                        <pre class="small mb-0"><code>{{ validation.parameters|tojson(indent=2) }}</code></pre>
+                                                    </td>
+                                                    <td>
+                                                        {% if validation.passed %}
+                                                            <span class="badge bg-success">Passed</span>
+                                                        {% else %}
+                                                            <span class="badge bg-danger">Failed</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        {% if validation.score is not none %}
+                                                            {{ "%.2f"|format(validation.score) }}
+                                                        {% else %}
+                                                            -
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>{{ validation.details.details }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    No validations defined for this turn.
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+        
+        <div class="mt-4">
+            <a href="{{ url_for('main.test_runs') }}" class="btn btn-secondary">Back to Test Runs</a>
+            <a href="{{ url_for('main.run_test', test_id=test_run.test_case_id) }}" class="btn btn-success">
+                <i class="fas fa-redo me-1"></i> Run Again
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

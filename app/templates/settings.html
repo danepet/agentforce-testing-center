@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - AI Agent Testing Center{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h2 class="mb-0">
+            <i class="fas fa-cog text-primary me-2"></i>
+            Settings
+        </h2>
+    </div>
+    <div class="card-body">
+        <form method="post">
+            <h4 class="mb-3">Salesforce AI Agent Settings</h4>
+            
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label for="sf_org_domain" class="form-label">Salesforce Org Domain</label>
+                    <input type="text" class="form-control" id="sf_org_domain" name="sf_org_domain" placeholder="yourdomain.my.salesforce.com" value="{{ config.SF_ORG_DOMAIN }}">
+                    <div class="form-text">E.g., yourdomain.my.salesforce.com</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="sf_agent_id" class="form-label">Agent ID</label>
+                    <input type="text" class="form-control" id="sf_agent_id" name="sf_agent_id" placeholder="0xxxxxxxxxxxx" value="{{ config.SF_AGENT_ID }}">
+                    <div class="form-text">The ID of the AI Agent to test against</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="sf_client_id" class="form-label">Client ID</label>
+                    <input type="text" class="form-control" id="sf_client_id" name="sf_client_id" value="{{ config.SF_CLIENT_ID }}">
+                    <div class="form-text">Connected App Client ID</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="sf_client_secret" class="form-label">Client Secret</label>
+                    <input type="password" class="form-control" id="sf_client_secret" name="sf_client_secret" value="{{ config.SF_CLIENT_SECRET }}">
+                    <div class="form-text">Connected App Client Secret</div>
+                </div>
+            </div>
+            
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Note:</strong> These settings provide default values for test runs. You can override 
+                them when running individual tests.
+            </div>
+            
+            <div class="mt-4">
+                <button type="submit" class="btn btn-primary">Save Settings</button>
+            </div>
+        </form>
+        
+        <hr class="my-5">
+        
+        <h4 class="mb-3">Additional Settings</h4>
+        
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">DeepEval API Key</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">
+                            The DeepEval API Key is used for advanced validation metrics. 
+                            It's currently managed in the application configuration.
+                        </p>
+                        <a href="https://github.com/confident-ai/deepeval" target="_blank" class="btn btn-outline-secondary btn-sm">
+                            <i class="fas fa-external-link-alt me-1"></i> Learn More
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">Web Scraping Settings</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">
+                            Web scraping settings like request timeout and user agent are managed 
+                            in the application configuration.
+                        </p>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled>
+                            <i class="fas fa-cog me-1"></i> Advanced Settings
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Store settings in localStorage for convenience
+    $(document).ready(function() {
+        $('form').submit(function() {
+            // Save settings to localStorage when form is submitted
+            localStorage.setItem('sf_org_domain', $('#sf_org_domain').val());
+            localStorage.setItem('sf_client_id', $('#sf_client_id').val());
+            localStorage.setItem('sf_client_secret', $('#sf_client_secret').val());
+            localStorage.setItem('sf_agent_id', $('#sf_agent_id').val());
+        });
+    });
+</script>
+{% endblock %}

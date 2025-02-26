@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Test Cases - AI Agent Testing Center{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h2 class="mb-0">
+            <i class="fas fa-file-alt text-primary me-2"></i>
+            Test Cases
+        </h2>
+        <a href="{{ url_for('main.create_test') }}" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i> Create Test Case
+        </a>
+    </div>
+    <div class="card-body">
+        {% if test_cases %}
+            <div class="table-responsive">
+                <table class="table table-hover table-striped">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Turns</th>
+                            <th>Created</th>
+                            <th>Last Updated</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for test_case in test_cases %}
+                            <tr>
+                                <td>
+                                    <a href="{{ url_for('main.view_test', test_id=test_case.id) }}">
+                                        {{ test_case.name }}
+                                    </a>
+                                </td>
+                                <td>{{ test_case.description }}</td>
+                                <td>{{ test_case.turns|length }}</td>
+                                <td>{{ test_case.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ test_case.updated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    <div class="btn-group">
+                                        <a href="{{ url_for('main.view_test', test_id=test_case.id) }}" 
+                                           class="btn btn-sm btn-outline-primary" title="View">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="{{ url_for('main.edit_test', test_id=test_case.id) }}" 
+                                           class="btn btn-sm btn-outline-secondary" title="Edit">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <a href="{{ url_for('main.run_test', test_id=test_case.id) }}" 
+                                           class="btn btn-sm btn-outline-success" title="Run">
+                                            <i class="fas fa-play"></i>
+                                        </a>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" 
+                                                data-bs-toggle="modal" data-bs-target="#deleteModal{{ test_case.id }}" title="Delete">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Delete Confirmation Modal -->
+                                    <div class="modal fade" id="deleteModal{{ test_case.id }}" tabindex="-1">
+                                        <div class="modal-dialog">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">Confirm Delete</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p>Are you sure you want to delete the test case <strong>{{ test_case.name }}</strong>?</p>
+                                                    <p class="text-danger">This action cannot be undone!</p>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                    <form action="{{ url_for('main.delete_test', test_id=test_case.id) }}" method="post">
+                                                        <button type="submit" class="btn btn-danger">Delete</button>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info text-center">
+                <p>No test cases found. Click the button below to create one.</p>
+                <a href="{{ url_for('main.create_test') }}" class="btn btn-primary mt-2">
+                    <i class="fas fa-plus me-1"></i> Create Test Case
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

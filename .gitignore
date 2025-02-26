@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+venvtc/
+.DS_Store
+.env
+instance/
+migrations/
+*.log
+.idea/
+.vscode/
+*.sqlite3
+coverage/
+*.egg-info/

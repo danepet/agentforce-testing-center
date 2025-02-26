@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Home - AI Agent Testing Center{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-body">
+        <h1 class="card-title mb-4">
+            <i class="fas fa-robot text-primary me-2"></i>
+            AI Agent Testing Center
+        </h1>
+        
+        <p class="lead">
+            Welcome to the AI Agent Testing Center! This application helps you define, run, and validate 
+            conversational test cases for AI Agents.
+        </p>
+        
+        <div class="row mt-5">
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-file-alt fa-3x text-primary mb-3"></i>
+                        <h3>Define Test Cases</h3>
+                        <p>Create conversational test cases with multiple turns and expected validations.</p>
+                        <a href="{{ url_for('main.create_test') }}" class="btn btn-primary mt-3">
+                            <i class="fas fa-plus me-1"></i> Create Test Case
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-play-circle fa-3x text-success mb-3"></i>
+                        <h3>Run Tests</h3>
+                        <p>Execute your test cases against AI Agents and validate responses.</p>
+                        <a href="{{ url_for('main.test_list') }}" class="btn btn-success mt-3">
+                            <i class="fas fa-list me-1"></i> View Test Cases
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-chart-bar fa-3x text-info mb-3"></i>
+                        <h3>Analyze Results</h3>
+                        <p>View detailed test results, validations, and export reports.</p>
+                        <a href="{{ url_for('main.test_runs') }}" class="btn btn-info mt-3">
+                            <i class="fas fa-history me-1"></i> View Test Runs
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-5">
+            <h2>Getting Started</h2>
+            <ol class="list-group list-group-numbered mt-3">
+                <li class="list-group-item">
+                    <h5>Configure Settings</h5>
+                    <p>
+                        Start by configuring your Salesforce AI Agent credentials in 
+                        <a href="{{ url_for('main.settings') }}">Settings</a>.
+                    </p>
+                </li>
+                <li class="list-group-item">
+                    <h5>Create Test Cases</h5>
+                    <p>
+                        Define conversational test cases with multiple turns and expected 
+                        validation criteria.
+                    </p>
+                </li>
+                <li class="list-group-item">
+                    <h5>Run Tests</h5>
+                    <p>
+                        Execute your test cases against the AI Agent and validate the responses
+                        with DeepEval and other validation methods.
+                    </p>
+                </li>
+                <li class="list-group-item">
+                    <h5>Analyze Results</h5>
+                    <p>
+                        View detailed test results, review validation outcomes, and export 
+                        results for reporting.
+                    </p>
+                </li>
+            </ol>
+        </div>
+    </div>
+</div>
+{% endblock %}

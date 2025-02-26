@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+
+{% block title %}Create Test Case - AI Agent Testing Center{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h2 class="mb-0">
+            <i class="fas fa-plus-circle text-primary me-2"></i>
+            Create Test Case
+        </h2>
+    </div>
+    <div class="card-body">
+        <form id="createTestForm" method="post">
+            <div class="mb-3">
+                <label for="name" class="form-label">Test Case Name</label>
+                <input type="text" class="form-control" id="name" name="name" required>
+            </div>
+            
+            <div class="mb-3">
+                <label for="description" class="form-label">Description</label>
+                <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+            </div>
+            
+            <h3 class="mt-4 mb-3">Conversation Turns</h3>
+            
+            <div id="conversationTurns">
+                <!-- Turns will be added here -->
+            </div>
+            
+            <input type="hidden" id="turn_count" name="turn_count" value="0">
+            
+            <div class="mt-3">
+                <button type="button" id="addTurnBtn" class="btn btn-outline-primary">
+                    <i class="fas fa-plus me-1"></i> Add Turn
+                </button>
+            </div>
+            
+            <div class="mt-4">
+                <a href="{{ url_for('main.test_list') }}" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">Create Test Case</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Validation Type Modal -->
+<div class="modal fade" id="validationModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Validation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="validationType" class="form-label">Validation Type</label>
+                    <select class="form-select" id="validationType">
+                        <option value="">Select a validation type</option>
+                    </select>
+                    <div class="form-text" id="validationDescription"></div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="validationParameters" class="form-label">Parameters (JSON)</label>
+                    <textarea class="form-control" id="validationParameters" rows="5"></textarea>
+                    <div class="form-text">Parameters should be provided as a valid JSON object.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="addValidationBtn">Add Validation</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Store validation templates
+    let validationTemplates = {};
+    let currentTurnIndex = null;
+    
+    // Fetch validation types when page loads
+    $(document).ready(function() {
+        fetchValidationTypes();
+        addTurn();
+        
+        // Add turn button
+        $('#addTurnBtn').click(function() {
+            addTurn();
+        });
+        
+        // Add validation button in modal
+        $('#addValidationBtn').click(function() {
+            addValidation();
+        });
+    });
+    
+    // Fetch validation types from API
+    function fetchValidationTypes() {
+        $.getJSON('/api/validation_types', function(data) {
+            validationTemplates = data;
+            
+            // Populate validation type dropdown
+            const select = $('#validationType');
+            select.empty();
+            select.append('<option value="">Select a validation type</option>');
+            
+            for (const [type, info] of Object.entries(data)) {
+                select.append(`<option value="${type}">${type} - ${info.description}</option>`);
+            }
+            
+            // Update parameters when type changes
+            select.change(function() {
+                const type = $(this).val();
+                if (type && validationTemplates[type]) {
+                    $('#validationDescription').text(validationTemplates[type].description);
+                    $('#validationParameters').val(JSON.stringify(validationTemplates[type].parameters, null, 2));
+                } else {
+                    $('#validationDescription').text('');
+                    $('#validationParameters').val('');
+                }
+            });
+        });
+    }
+    
+    // Add a new conversation turn
+    function addTurn() {
+        const turnCount = parseInt($('#turn_count').val()) || 0;
+        const newTurnIndex = turnCount;
+        
+        const turnHtml = `
+            <div class="card mb-3 turn-card" id="turn_${newTurnIndex}_card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Turn ${newTurnIndex + 1} - User Input</h5>
+                    <button type="button" class="btn btn-sm btn-outline-danger remove-turn-btn" data-turn="${newTurnIndex}">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="turn_${newTurnIndex}_input" class="form-label">User Message</label>
+                        <textarea class="form-control" id="turn_${newTurnIndex}_input" name="turn_${newTurnIndex}_input" rows="3" required></textarea>
+                    </div>
+                    
+                    <h6 class="mt-4 mb-3">Expected Validations</h6>
+                    
+                    <div id="turn_${newTurnIndex}_validations">
+                        <!-- Validations will be added here -->
+                    </div>
+                    
+                    <input type="hidden" id="turn_${newTurnIndex}_validation_count" name="turn_${newTurnIndex}_validation_count" value="0">
+                    
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary add-validation-btn" data-turn="${newTurnIndex}">
+                            <i class="fas fa-plus me-1"></i> Add Validation
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        $('#conversationTurns').append(turnHtml);
+        $('#turn_count').val(turnCount + 1);
+        
+        // Add event listener for remove turn button
+        $(`#turn_${newTurnIndex}_card .remove-turn-btn`).click(function() {
+            const turnIndex = $(this).data('turn');
+            removeTurn(turnIndex);
+        });
+        
+        // Add event listener for add validation button
+        $(`#turn_${newTurnIndex}_card .add-validation-btn`).click(function() {
+            currentTurnIndex = $(this).data('turn');
+            $('#validationType').val('').trigger('change');
+            $('#validationModal').modal('show');
+        });
+    }
+    
+    // Remove a conversation turn
+    function removeTurn(turnIndex) {
+        $(`#turn_${turnIndex}_card`).remove();
+        
+        // Renumber remaining turns
+        let newTurnCount = 0;
+        $('.turn-card').each(function(index) {
+            const oldIndex = $(this).attr('id').match(/turn_(\d+)_card/)[1];
+            
+            // Update card ID and title
+            $(this).attr('id', `turn_${index}_card`);
+            $(this).find('.card-header h5').text(`Turn ${index + 1} - User Input`);
+            
+            // Update input field
+            const inputField = $(this).find(`#turn_${oldIndex}_input`);
+            const inputValue = inputField.val();
+            inputField.attr('id', `turn_${index}_input`);
+            inputField.attr('name', `turn_${index}_input`);
+            inputField.val(inputValue);
+            
+            // Update validations container
+            const validationsContainer = $(this).find(`#turn_${oldIndex}_validations`);
+            validationsContainer.attr('id', `turn_${index}_validations`);
+            
+            // Update validation count field
+            const validationCountField = $(this).find(`#turn_${oldIndex}_validation_count`);
+            const validationCount = validationCountField.val();
+            validationCountField.attr('id', `turn_${index}_validation_count`);
+            validationCountField.attr('name', `turn_${index}_validation_count`);
+            validationCountField.val(validationCount);
+            
+            // Update validation fields
+            $(this).find(`[id^="turn_${oldIndex}_validation_"]`).each(function() {
+                const field = $(this);
+                const fieldId = field.attr('id');
+                const newFieldId = fieldId.replace(`turn_${oldIndex}_`, `turn_${index}_`);
+                field.attr('id', newFieldId);
+                
+                if (field.attr('name')) {
+                    const fieldName = field.attr('name');
+                    const newFieldName = fieldName.replace(`turn_${oldIndex}_`, `turn_${index}_`);
+                    field.attr('name', newFieldName);
+                }
+            });
+            
+            // Update buttons data attribute
+            $(this).find('.remove-turn-btn').data('turn', index);
+            $(this).find('.add-validation-btn').data('turn', index);
+            $(this).find('.remove-validation-btn').each(function() {
+                const btn = $(this);
+                const oldTurnIndex = btn.data('turn');
+                const validationIndex = btn.data('validation');
+                btn.data('turn', index);
+            });
+            
+            newTurnCount++;
+        });
+        
+        $('#turn_count').val(newTurnCount);
+    }
+    
+    // Add a validation to a turn
+    function addValidation() {
+        if (currentTurnIndex === null) return;
+        
+        const validationType = $('#validationType').val();
+        const validationParameters = $('#validationParameters').val();
+        
+        if (!validationType || !validationParameters) {
+            alert('Please select a validation type and provide parameters.');
+            return;
+        }
+        
+        try {
+            // Validate JSON
+            JSON.parse(validationParameters);
+            
+            const validationCount = parseInt($(`#turn_${currentTurnIndex}_validation_count`).val()) || 0;
+            const newValidationIndex = validationCount;
+            
+            // Get validation description
+            const validationDesc = validationTemplates[validationType].description;
+            
+            const validationHtml = `
+                <div class="alert alert-light border" id="turn_${currentTurnIndex}_validation_${newValidationIndex}_container">
+                    <div class="d-flex justify-content-between">
+                        <strong>${validationType}</strong>
+                        <button type="button" class="btn btn-sm btn-outline-danger remove-validation-btn" data-turn="${currentTurnIndex}" data-validation="${newValidationIndex}">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="small text-muted">${validationDesc}</div>
+                    <input type="hidden" id="turn_${currentTurnIndex}_validation_${newValidationIndex}_type" name="turn_${currentTurnIndex}_validation_${newValidationIndex}_type" value="${validationType}">
+                    <input type="hidden" id="turn_${currentTurnIndex}_validation_${newValidationIndex}_parameters" name="turn_${currentTurnIndex}_validation_${newValidationIndex}_parameters" value='${validationParameters}'>
+                </div>
+            `;
+            
+            $(`#turn_${currentTurnIndex}_validations`).append(validationHtml);
+            $(`#turn_${currentTurnIndex}_validation_count`).val(validationCount + 1);
+            
+            // Add event listener for remove validation button
+            $(`#turn_${currentTurnIndex}_validation_${newValidationIndex}_container .remove-validation-btn`).click(function() {
+                const turnIndex = $(this).data('turn');
+                const validationIndex = $(this).data('validation');
+                removeValidation(turnIndex, validationIndex);
+            });
+            
+            // Close modal
+            $('#validationModal').modal('hide');
+            
+        } catch (e) {
+            alert('Invalid JSON parameters. Please check your input.');
+        }
+    }
+    
+    // Remove a validation
+    function removeValidation(turnIndex, validationIndex) {
+        $(`#turn_${turnIndex}_validation_${validationIndex}_container`).remove();
+        
+        // Renumber remaining validations
+        let newValidationCount = 0;
+        $(`#turn_${turnIndex}_validations .alert`).each(function(index) {
+            const oldIndex = $(this).attr('id').match(/turn_\d+_validation_(\d+)_container/)[1];
+            
+            // Update container ID
+            $(this).attr('id', `turn_${turnIndex}_validation_${index}_container`);
+            
+            // Update hidden fields
+            const typeField = $(this).find(`#turn_${turnIndex}_validation_${oldIndex}_type`);
+            const typeValue = typeField.val();
+            typeField.attr('id', `turn_${turnIndex}_validation_${index}_type`);
+            typeField.attr('name', `turn_${turnIndex}_validation_${index}_type`);
+            typeField.val(typeValue);
+            
+            const paramsField = $(this).find(`#turn_${turnIndex}_validation_${oldIndex}_parameters`);
+            const paramsValue = paramsField.val();
+            paramsField.attr('id', `turn_${turnIndex}_validation_${index}_parameters`);
+            paramsField.attr('name', `turn_${turnIndex}_validation_${index}_parameters`);
+            paramsField.val(paramsValue);
+            
+            // Update button data attribute
+            $(this).find('.remove-validation-btn').data('validation', index);
+            
+            newValidationCount++;
+        });
+        
+        $(`#turn_${turnIndex}_validation_count`).val(newValidationCount);
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Run Test Case - AI Agent Testing Center{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h2 class="mb-0">
+            <i class="fas fa-play-circle text-success me-2"></i>
+            Run Test Case: {{ test_case.name }}
+        </h2>
+    </div>
+    <div class="card-body">
+        <p class="lead">You are about to run the following test case against an AI Agent:</p>
+        
+        <div class="mb-4">
+            <h5>Description</h5>
+            <p>{{ test_case.description or 'No description provided.' }}</p>
+        </div>
+        
+        <div class="mb-4">
+            <h5>Conversation Turns</h5>
+            <div class="list-group">
+                {% for turn in test_case.turns|sort(attribute='order') %}
+                <div class="list-group-item">
+                    <h6>Turn {{ loop.index }} - User Input</h6>
+                    <p class="mb-2">{{ turn.user_input }}</p>
+                    
+                    {% if turn.expected_validations %}
+                    <h6 class="mt-3 mb-2 text-muted">Expected Validations</h6>
+                    <ul class="list-unstyled">
+                        {% for validation in turn.expected_validations %}
+                        <li>
+                            <span class="badge bg-secondary">{{ validation.validation_type }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <h5 class="mb-3">AI Agent Credentials</h5>
+        <form method="post">
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label for="sf_org_domain" class="form-label">Salesforce Org Domain</label>
+                    <input type="text" class="form-control" id="sf_org_domain" name="sf_org_domain" placeholder="yourdomain.my.salesforce.com" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="sf_agent_id" class="form-label">Agent ID</label>
+                    <input type="text" class="form-control" id="sf_agent_id" name="sf_agent_id" placeholder="0xxxxxxxxxxxx" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="sf_client_id" class="form-label">Client ID</label>
+                    <input type="text" class="form-control" id="sf_client_id" name="sf_client_id" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="sf_client_secret" class="form-label">Client Secret</label>
+                    <input type="password" class="form-control" id="sf_client_secret" name="sf_client_secret" required>
+                </div>
+            </div>
+            
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                You can set default values for these fields in the <a href="{{ url_for('main.settings') }}">Settings</a> page.
+            </div>
+            
+            <div class="mt-4">
+                <a href="{{ url_for('main.view_test', test_id=test_case.id) }}" class="btn btn-secondary">Back</a>
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-play me-1"></i> Run Test
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Fetch default credentials from settings when page loads
+    $(document).ready(function() {
+        // Check for credentials from localStorage
+        const orgDomain = localStorage.getItem('sf_org_domain');
+        const clientId = localStorage.getItem('sf_client_id');
+        const clientSecret = localStorage.getItem('sf_client_secret');
+        const agentId = localStorage.getItem('sf_agent_id');
+        
+        if (orgDomain) {
+            $('#sf_org_domain').val(orgDomain);
+        }
+        
+        if (clientId) {
+            $('#sf_client_id').val(clientId);
+        }
+        
+        if (clientSecret) {
+            $('#sf_client_secret').val(clientSecret);
+        }
+        
+        if (agentId) {
+            $('#sf_agent_id').val(agentId);
+        }
+        
+        // Save credentials to localStorage when form is submitted
+        $('form').submit(function() {
+            localStorage.setItem('sf_org_domain', $('#sf_org_domain').val());
+            localStorage.setItem('sf_client_id', $('#sf_client_id').val());
+            localStorage.setItem('sf_client_secret', $('#sf_client_secret').val());
+            localStorage.setItem('sf_agent_id', $('#sf_agent_id').val());
+        });
+    });
+</script>
+{% endblock %}
