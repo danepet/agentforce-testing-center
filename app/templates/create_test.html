@@ -134,7 +134,12 @@
         const turnHtml = `
             <div class="card mb-3 turn-card" id="turn_${newTurnIndex}_card">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Turn ${newTurnIndex + 1} - User Input</h5>
+                    <h5 class="mb-0">
+                        <div class="drag-handle">
+                            <i class="fas fa-grip-vertical"></i>
+                        </div>
+                        Turn ${newTurnIndex + 1} - User Input
+                    </h5>
                     <button type="button" class="btn btn-sm btn-outline-danger remove-turn-btn" data-turn="${newTurnIndex}">
                         <i class="fas fa-times"></i>
                     </button>

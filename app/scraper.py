@@ -58,11 +58,12 @@ class WebScraper:
         
         return cleaned_urls
     
-    def scrape_url(self, url):
+    def scrape_url(self, url, selector=None):
         """Scrape content from a URL.
         
         Args:
             url (str): URL to scrape
+            selector (str, optional): CSS selector to target specific content
             
         Returns:
             dict: Dictionary containing scraped content and metadata
@@ -89,8 +90,23 @@ class WebScraper:
             for script in soup(["script", "style"]):
                 script.extract()
             
-            # Get text content
-            text = soup.get_text(separator='\n')
+            # If a CSS selector is provided, try to extract content from specified elements
+            text = ""
+            if selector:
+                try:
+                    selected_elements = soup.select(selector)
+                    if selected_elements:
+                        for element in selected_elements:
+                            text += element.get_text(separator='\n') + "\n"
+                    else:
+                        logger.warning(f"Selector '{selector}' not found in page, falling back to full page content")
+                        text = soup.get_text(separator='\n')
+                except Exception as e:
+                    logger.warning(f"Error using selector '{selector}': {str(e)}. Falling back to full page content")
+                    text = soup.get_text(separator='\n')
+            else:
+                # Get full page text content by default
+                text = soup.get_text(separator='\n')
             
             # Remove excess whitespace
             clean_text = '\n'.join([line.strip() for line in text.splitlines() if line.strip()])
@@ -109,7 +125,8 @@ class WebScraper:
                 'success': True,
                 'title': title,
                 'meta_description': meta_desc,
-                'content': clean_text
+                'content': clean_text,
+                'selector_used': selector if selector else 'full_page'
             }
             
         except requests.exceptions.HTTPError as e:
@@ -146,17 +163,18 @@ class WebScraper:
                 'content': None
             }
     
-    def scrape_multiple_urls(self, urls):
+    def scrape_multiple_urls(self, urls, selector=None):
         """Scrape content from multiple URLs.
         
         Args:
             urls (list): List of URLs to scrape
+            selector (str, optional): CSS selector to target specific content
             
         Returns:
             dict: Dictionary mapping URLs to their scraped content
         """
         results = {}
         for url in urls:
-            results[url] = self.scrape_url(url)
+            results[url] = self.scrape_url(url, selector)
         
         return results

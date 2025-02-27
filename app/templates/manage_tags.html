@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Tags - AI Agent Testing Center{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h2 class="mb-0">
+            <i class="fas fa-tags text-primary me-2"></i>
+            Manage Tags
+        </h2>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTagModal">
+            <i class="fas fa-plus me-1"></i> Create Tag
+        </button>
+    </div>
+    <div class="card-body">
+        {% if tags %}
+            <div class="table-responsive">
+                <table class="table table-hover table-striped">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Name</th>
+                            <th>Color</th>
+                            <th>Test Cases</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tag in tags %}
+                            <tr>
+                                <td>
+                                    <span class="badge bg-{{ tag.color }}">{{ tag.name }}</span>
+                                </td>
+                                <td>{{ tag.color }}</td>
+                                <td>{{ tag.test_cases|length }}</td>
+                                <td>
+                                    <div class="btn-group">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary edit-tag-btn" 
+                                                data-tag-id="{{ tag.id }}" data-tag-name="{{ tag.name }}" data-tag-color="{{ tag.color }}"
+                                                data-bs-toggle="modal" data-bs-target="#editTagModal">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger delete-tag-btn"
+                                                data-tag-id="{{ tag.id }}" data-tag-name="{{ tag.name }}"
+                                                data-bs-toggle="modal" data-bs-target="#deleteTagModal">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info text-center">
+                <p>No tags found. Click the button above to create one.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Create Tag Modal -->
+<div class="modal fade" id="createTagModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create Tag</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('main.create_tag') }}" method="post">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="tagName" class="form-label">Tag Name</label>
+                        <input type="text" class="form-control" id="tagName" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="tagColor" class="form-label">Color</label>
+                        <select class="form-select" id="tagColor" name="color">
+                            <option value="primary">Primary (Blue)</option>
+                            <option value="secondary">Secondary (Gray)</option>
+                            <option value="success">Success (Green)</option>
+                            <option value="danger">Danger (Red)</option>
+                            <option value="warning">Warning (Yellow)</option>
+                            <option value="info">Info (Light Blue)</option>
+                            <option value="dark">Dark (Black)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Preview</label>
+                        <div>
+                            <span class="badge bg-primary" id="tagPreview">Tag Name</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Tag</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Tag Modal -->
+<div class="modal fade" id="editTagModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Tag</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('main.edit_tag') }}" method="post" id="editTagForm">
+                <div class="modal-body">
+                    <input type="hidden" name="tag_id" id="editTagId">
+                    <div class="mb-3">
+                        <label for="editTagName" class="form-label">Tag Name</label>
+                        <input type="text" class="form-control" id="editTagName" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editTagColor" class="form-label">Color</label>
+                        <select class="form-select" id="editTagColor" name="color">
+                            <option value="primary">Primary (Blue)</option>
+                            <option value="secondary">Secondary (Gray)</option>
+                            <option value="success">Success (Green)</option>
+                            <option value="danger">Danger (Red)</option>
+                            <option value="warning">Warning (Yellow)</option>
+                            <option value="info">Info (Light Blue)</option>
+                            <option value="dark">Dark (Black)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Preview</label>
+                        <div>
+                            <span class="badge bg-primary" id="editTagPreview">Tag Name</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Tag Modal -->
+<div class="modal fade" id="deleteTagModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the tag <strong id="deleteTagName"></strong>?</p>
+                <p class="text-danger">This action cannot be undone!</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form action="{{ url_for('main.delete_tag', tag_id=0) }}" method="post" id="deleteTagForm">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Tag preview in create modal
+        const tagName = document.getElementById('tagName');
+        const tagColor = document.getElementById('tagColor');
+        const tagPreview = document.getElementById('tagPreview');
+        
+        function updateTagPreview() {
+            tagPreview.textContent = tagName.value || 'Tag Name';
+            tagPreview.className = `badge bg-${tagColor.value}`;
+        }
+        
+        tagName.addEventListener('input', updateTagPreview);
+        tagColor.addEventListener('change', updateTagPreview);
+        
+        // Tag preview in edit modal
+        const editTagName = document.getElementById('editTagName');
+        const editTagColor = document.getElementById('editTagColor');
+        const editTagPreview = document.getElementById('editTagPreview');
+        
+        function updateEditTagPreview() {
+            editTagPreview.textContent = editTagName.value || 'Tag Name';
+            editTagPreview.className = `badge bg-${editTagColor.value}`;
+        }
+        
+        editTagName.addEventListener('input', updateEditTagPreview);
+        editTagColor.addEventListener('change', updateEditTagPreview);
+        
+        // Edit tag modal
+        const editTagModal = document.getElementById('editTagModal');
+        editTagModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const tagId = button.getAttribute('data-tag-id');
+            const tagName = button.getAttribute('data-tag-name');
+            const tagColor = button.getAttribute('data-tag-color');
+            
+            document.getElementById('editTagId').value = tagId;
+            document.getElementById('editTagName').value = tagName;
+            document.getElementById('editTagColor').value = tagColor;
+            
+            updateEditTagPreview();
+        });
+        
+        // Delete tag modal
+        const deleteTagModal = document.getElementById('deleteTagModal');
+        deleteTagModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const tagId = button.getAttribute('data-tag-id');
+            const tagName = button.getAttribute('data-tag-name');
+            
+            document.getElementById('deleteTagName').textContent = tagName;
+            document.getElementById('deleteTagForm').action = `/tags/${tagId}/delete`;
+        });
+    });
+</script>
+{% endblock %}

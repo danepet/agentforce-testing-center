@@ -2,6 +2,96 @@ import json
 from datetime import datetime
 from app import db
 
+test_case_tags = db.Table('test_case_tags',
+    db.Column('test_case_id', db.Integer, db.ForeignKey('test_cases.id'), primary_key=True),
+    db.Column('tag_id', db.Integer, db.ForeignKey('tags.id'), primary_key=True)
+)
+
+class TestMetrics(db.Model):
+    """Model for storing aggregated test metrics for trend analysis."""
+    __tablename__ = 'test_metrics'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    test_case_id = db.Column(db.Integer, db.ForeignKey('test_cases.id'), nullable=False)
+    test_run_id = db.Column(db.Integer, db.ForeignKey('test_runs.id'), nullable=False)
+    date = db.Column(db.Date, default=datetime.utcnow().date)
+    
+    # Validation metrics
+    validation_total = db.Column(db.Integer, default=0)
+    validation_passed = db.Column(db.Integer, default=0)
+    validation_failed = db.Column(db.Integer, default=0)
+    pass_rate = db.Column(db.Float, default=0.0)
+    
+    # Response time metrics (milliseconds)
+    avg_response_time = db.Column(db.Integer)
+    min_response_time = db.Column(db.Integer)
+    max_response_time = db.Column(db.Integer)
+    
+    # Common failure categories
+    failure_categories = db.Column(db.Text)  # JSON-encoded summary of failure types
+    
+    # Relationships
+    test_case = db.relationship('TestCase', back_populates='metrics')
+    test_run = db.relationship('TestRun', back_populates='metrics')
+    
+    def __repr__(self):
+        return f'<TestMetrics for TestCase {self.test_case_id}, Run {self.test_run_id}>'
+    
+    @classmethod
+    def create_from_test_run(cls, test_run_id):
+        """Create metrics record from a test run."""
+        from app.test_runner import TestRunner
+        from flask import current_app
+        
+        try:
+            # Get test run
+            test_run = TestRun.query.get(test_run_id)
+            if not test_run:
+                return None
+            
+            # Get test results
+            test_runner = TestRunner(current_app.config)
+            results = test_runner.get_test_results(test_run_id)
+            
+            # Calculate response times
+            response_times = []
+            failure_types = {}
+            
+            for turn_result in TurnResult.query.filter_by(test_run_id=test_run_id).all():
+                # Calculate response time if available
+                if hasattr(turn_result, 'response_time_ms') and turn_result.response_time_ms:
+                    response_times.append(turn_result.response_time_ms)
+                
+                # Analyze failures
+                for validation_result in ValidationResult.query.filter_by(turn_result_id=turn_result.id).all():
+                    if not validation_result.is_passed:
+                        validation = ExpectedValidation.query.get(validation_result.validation_id)
+                        failure_type = validation.validation_type
+                        failure_types[failure_type] = failure_types.get(failure_type, 0) + 1
+            
+            # Create metrics record
+            metrics = cls(
+                test_case_id=test_run.test_case_id,
+                test_run_id=test_run_id,
+                validation_total=results['validation_counts']['total'],
+                validation_passed=results['validation_counts']['passed'],
+                validation_failed=results['validation_counts']['failed'],
+                pass_rate=results['pass_percentage'],
+                avg_response_time=int(sum(response_times) / len(response_times)) if response_times else None,
+                min_response_time=min(response_times) if response_times else None,
+                max_response_time=max(response_times) if response_times else None,
+                failure_categories=json.dumps(failure_types)
+            )
+            
+            db.session.add(metrics)
+            db.session.commit()
+            
+            return metrics
+            
+        except Exception as e:
+            db.session.rollback()
+            return None
+
 class TestCase(db.Model):
     """Test case model that represents a full conversation test with an AI Agent."""
     __tablename__ = 'test_cases'
@@ -11,12 +101,18 @@ class TestCase(db.Model):
     description = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
     
+    tags = db.relationship('Tag', secondary=test_case_tags, back_populates='test_cases')
+
     # Relationship with conversation turns
     turns = db.relationship('ConversationTurn', backref='test_case', lazy=True, cascade='all, delete-orphan')
     # Relationship with test runs
     runs = db.relationship('TestRun', backref='test_case', lazy=True, cascade='all, delete-orphan')
+
+    metrics = db.relationship('TestMetrics', back_populates='test_case', lazy=True)
     
+
     def __repr__(self):
         return f'<TestCase {self.name}>'
     
@@ -29,6 +125,26 @@ class TestCase(db.Model):
             'updated_at': self.updated_at.isoformat(),
             'turns': [turn.to_dict() for turn in self.turns]
         }
+    
+    def add_tag(self, tag_name, color='primary'):
+        """Add a tag to the test case."""
+        tag = Tag.query.filter_by(name=tag_name).first()
+        if not tag:
+            tag = Tag(name=tag_name, color=color)
+            db.session.add(tag)
+        
+        if tag not in self.tags:
+            self.tags.append(tag)
+        
+        return tag
+
+    def remove_tag(self, tag_name):
+        """Remove a tag from the test case."""
+        tag = Tag.query.filter_by(name=tag_name).first()
+        if tag and tag in self.tags:
+            self.tags.remove(tag)
+        
+        return True
 
 class ConversationTurn(db.Model):
     """Represents a single turn in a conversation test case."""
@@ -90,7 +206,8 @@ class TestRun(db.Model):
     
     # Relationship with turn results
     turn_results = db.relationship('TurnResult', backref='test_run', lazy=True, cascade='all, delete-orphan')
-    
+    metrics = db.relationship('TestMetrics', uselist=False, back_populates='test_run', lazy=True)
+
     def __repr__(self):
         return f'<TestRun {self.id} for TestCase {self.test_case_id}>'
     
@@ -113,6 +230,7 @@ class TurnResult(db.Model):
     turn_id = db.Column(db.Integer, db.ForeignKey('conversation_turns.id'), nullable=False)
     agent_response = db.Column(db.Text, nullable=True)
     scraped_content = db.Column(db.Text, nullable=True)  # Scraped content if URLs were detected
+    response_time_ms = db.Column(db.Integer)
     
     # Relationship with validation results
     validation_results = db.relationship('ValidationResult', backref='turn_result', lazy=True, cascade='all, delete-orphan')
@@ -129,6 +247,57 @@ class TurnResult(db.Model):
             'scraped_content': self.scraped_content,
             'validation_results': [result.to_dict() for result in self.validation_results]
         }
+
+class Tag(db.Model):
+    """Tag model for categorizing test cases."""
+    __tablename__ = 'tags'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False, unique=True)
+    color = db.Column(db.String(20), nullable=False, default='primary')
+    
+    # Relationship with test cases
+    test_cases = db.relationship('TestCase', secondary=test_case_tags, back_populates='tags')
+    
+    def __repr__(self):
+        return f'<Tag {self.name}>'
+
+class Category(db.Model):
+    """Category model for organizing test cases."""
+    __tablename__ = 'categories'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    description = db.Column(db.Text, nullable=True)
+    
+    # Relationship with test cases
+    test_cases = db.relationship('TestCase', backref='category', lazy=True)
+    
+    def __repr__(self):
+        return f'<Category {self.name}>'
+
+# Update TestCase model
+
+# Add methods to TestCase class
+def add_tag(self, tag_name, color='primary'):
+    """Add a tag to the test case."""
+    tag = Tag.query.filter_by(name=tag_name).first()
+    if not tag:
+        tag = Tag(name=tag_name, color=color)
+        db.session.add(tag)
+    
+    if tag not in self.tags:
+        self.tags.append(tag)
+    
+    return tag
+
+def remove_tag(self, tag_name):
+    """Remove a tag from the test case."""
+    tag = Tag.query.filter_by(name=tag_name).first()
+    if tag and tag in self.tags:
+        self.tags.remove(tag)
+    
+    return True
 
 class ValidationResult(db.Model):
     """Represents the result of a validation check for a turn result."""

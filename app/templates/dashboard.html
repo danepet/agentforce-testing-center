@@ -1,0 +1,432 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - AI Agent Testing Center{% endblock %}
+
+{% block head %}
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1 class="display-6">
+            <i class="fas fa-chart-line text-primary me-2"></i>
+            Testing Dashboard
+        </h1>
+        <p class="lead">Overview of test performance and metrics over time.</p>
+    </div>
+    <div class="col-auto">
+        <div class="btn-group">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="timeRangeDropdown" data-bs-toggle="dropdown">
+                {{ time_range }}
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="{{ url_for('main.dashboard', time_range='Last 7 Days') }}">Last 7 Days</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('main.dashboard', time_range='Last 30 Days') }}">Last 30 Days</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('main.dashboard', time_range='Last 90 Days') }}">Last 90 Days</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('main.dashboard', time_range='All Time') }}">All Time</a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <!-- Test Success Rate Card -->
+    <div class="col-md-3">
+        <div class="card h-100 border-left-primary">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                            Average Success Rate
+                        </div>
+                        <div class="h3 mb-0 font-weight-bold">{{ "%.1f"|format(metrics.avg_pass_rate) }}%</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-percentage fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Total Test Runs Card -->
+    <div class="col-md-3">
+        <div class="card h-100 border-left-success">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                            Total Test Runs
+                        </div>
+                        <div class="h3 mb-0 font-weight-bold">{{ metrics.total_runs }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-flask fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Average Response Time Card -->
+    <div class="col-md-3">
+        <div class="card h-100 border-left-info">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                            Avg Response Time
+                        </div>
+                        <div class="h3 mb-0 font-weight-bold">{{ metrics.avg_response_time }}ms</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-clock fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Most Common Failure Type Card -->
+    <div class="col-md-3">
+        <div class="card h-100 border-left-warning">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                            Top Failure Type
+                        </div>
+                        <div class="h3 mb-0 font-weight-bold">{{ metrics.top_failure_type }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-exclamation-triangle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <!-- Success Rate Trend Chart -->
+    <div class="col-lg-8">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <h6 class="m-0 font-weight-bold text-primary">Success Rate Trend</h6>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="position: relative; height:300px;">
+                    <canvas id="successRateChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Failure Categories Chart -->
+    <div class="col-lg-4">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Failure Categories</h6>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="position: relative; height:300px;">
+                    <canvas id="failurePieChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <!-- Response Time Trend Chart -->
+    <div class="col-lg-6">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <h6 class="m-0 font-weight-bold text-primary">Response Time Trend</h6>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="position: relative; height:300px;">
+                    <canvas id="responseTimeChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Test Case Performance Chart -->
+    <div class="col-lg-6">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Test Case Performance</h6>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="position: relative; height:300px;">
+                    <canvas id="testCasePerformanceChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Recent Test Runs Table -->
+    <div class="col-12">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Recent Test Runs</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover" width="100%" cellspacing="0">
+                        <thead>
+                            <tr>
+                                <th>Test Case</th>
+                                <th>Run Date</th>
+                                <th>Status</th>
+                                <th>Pass Rate</th>
+                                <th>Avg Response Time</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for run in recent_runs %}
+                            <tr>
+                                <td>{{ run.test_case.name }}</td>
+                                <td>{{ run.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    {% if run.status == 'completed' %}
+                                    <span class="badge bg-success">Completed</span>
+                                    {% elif run.status == 'failed' %}
+                                    <span class="badge bg-danger">Failed</span>
+                                    {% else %}
+                                    <span class="badge bg-warning">{{ run.status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if run.metrics %}
+                                    {{ "%.1f"|format(run.metrics.pass_rate) }}%
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if run.metrics and run.metrics.avg_response_time %}
+                                    {{ run.metrics.avg_response_time }}ms
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('main.view_test_results', test_run_id=run.id) }}" class="btn btn-sm btn-primary">
+                                        <i class="fas fa-eye"></i> View
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Chart.js Configuration
+document.addEventListener('DOMContentLoaded', function() {
+    // Success Rate Chart
+    const successRateCtx = document.getElementById('successRateChart').getContext('2d');
+    const successRateChart = new Chart(successRateCtx, {
+        type: 'line',
+        data: {
+            labels: {{ chart_data.dates|tojson }},
+            datasets: [{
+                label: 'Success Rate %',
+                data: {{ chart_data.success_rates|tojson }},
+                borderColor: 'rgba(78, 115, 223, 1)',
+                backgroundColor: 'rgba(78, 115, 223, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `Success Rate: ${context.parsed.y.toFixed(1)}%`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    min: Math.max(0, Math.min(...{{ chart_data.success_rates|tojson }}) - 10),
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Success Rate (%)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                }
+            },
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+    
+    // Failure Categories Pie Chart
+    const failureCtx = document.getElementById('failurePieChart').getContext('2d');
+    const failurePieChart = new Chart(failureCtx, {
+        type: 'pie',
+        data: {
+            labels: {{ chart_data.failure_types|tojson }},
+            datasets: [{
+                data: {{ chart_data.failure_counts|tojson }},
+                backgroundColor: [
+                    'rgba(255, 99, 132, 0.8)',
+                    'rgba(54, 162, 235, 0.8)',
+                    'rgba(255, 206, 86, 0.8)',
+                    'rgba(75, 192, 192, 0.8)',
+                    'rgba(153, 102, 255, 0.8)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        boxWidth: 12
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = Math.round((value / total) * 100);
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    // Response Time Chart
+    const responseTimeCtx = document.getElementById('responseTimeChart').getContext('2d');
+    const responseTimeChart = new Chart(responseTimeCtx, {
+        type: 'line',
+        data: {
+            labels: {{ chart_data.dates|tojson }},
+            datasets: [{
+                label: 'Avg Response Time (ms)',
+                data: {{ chart_data.response_times|tojson }},
+                borderColor: 'rgba(75, 192, 192, 1)',
+                backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `Response Time: ${context.parsed.y}ms`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Response Time (ms)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                }
+            },
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+    
+    // Test Case Performance Chart
+    const testCaseCtx = document.getElementById('testCasePerformanceChart').getContext('2d');
+    const testCaseChart = new Chart(testCaseCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ chart_data.test_case_names|tojson }},
+            datasets: [{
+                label: 'Pass Rate (%)',
+                data: {{ chart_data.test_case_pass_rates|tojson }},
+                backgroundColor: 'rgba(54, 162, 235, 0.8)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            indexAxis: 'y',  // Horizontal bar chart
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `Pass Rate: ${context.parsed.x.toFixed(1)}%`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Pass Rate (%)'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Test Case'
+                    }
+                }
+            },
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+});
+</script>
+{% endblock %}

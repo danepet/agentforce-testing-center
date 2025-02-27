@@ -115,3 +115,114 @@ function validateAndSubmitForm(formId, validationFunction) {
         return true;
     });
 }
+
+// Loading indicator for test runs
+
+// Show loading overlay with spinner
+function showLoadingOverlay(message = 'Running test...') {
+    // Create overlay if it doesn't exist
+    if (!document.getElementById('loadingOverlay')) {
+      const overlay = document.createElement('div');
+      overlay.id = 'loadingOverlay';
+      overlay.className = 'loading-overlay';
+      
+      // Create spinner container
+      const spinnerContainer = document.createElement('div');
+      spinnerContainer.className = 'spinner-container';
+      
+      // Create spinner
+      const spinner = document.createElement('div');
+      spinner.className = 'spinner-border text-primary';
+      spinner.setAttribute('role', 'status');
+      
+      // Create spinner text
+      const spinnerText = document.createElement('span');
+      spinnerText.className = 'spinner-text mt-3';
+      spinnerText.id = 'spinnerText';
+      spinnerText.textContent = message;
+      
+      // Assemble the elements
+      spinnerContainer.appendChild(spinner);
+      spinnerContainer.appendChild(spinnerText);
+      overlay.appendChild(spinnerContainer);
+      
+      // Add the overlay to the body
+      document.body.appendChild(overlay);
+      
+      // Prevent scrolling while overlay is active
+      document.body.style.overflow = 'hidden';
+    } else {
+      // Update message if overlay already exists
+      document.getElementById('spinnerText').textContent = message;
+      document.getElementById('loadingOverlay').style.display = 'flex';
+    }
+  }
+  
+  // Hide loading overlay
+  function hideLoadingOverlay() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+      overlay.style.display = 'none';
+      document.body.style.overflow = 'auto';
+    }
+  }
+  
+  // Update progress message
+  function updateLoadingMessage(message) {
+    const spinnerText = document.getElementById('spinnerText');
+    if (spinnerText) {
+      spinnerText.textContent = message;
+    }
+  }
+  
+  // Add event listeners to test run forms
+  document.addEventListener('DOMContentLoaded', function() {
+    // For the run test form
+    const testRunForm = document.querySelector('form#runTestForm');
+    if (testRunForm) {
+      testRunForm.addEventListener('submit', function() {
+        showLoadingOverlay('Initializing test run...');
+        
+        // Simulate progress updates (in a real application, you might use WebSockets or polling)
+        setTimeout(() => updateLoadingMessage('Connecting to AI Agent...'), 1500);
+        setTimeout(() => updateLoadingMessage('Sending conversation turns...'), 3000);
+        setTimeout(() => updateLoadingMessage('Validating responses...'), 6000);
+        
+        return true;
+      });
+    }
+  });
+  
+  // Function to check test run status periodically
+  function pollTestRunStatus(testRunId, intervalMs = 2000) {
+    if (!testRunId) return;
+    
+    showLoadingOverlay('Test is running...');
+    
+    const statusCheckInterval = setInterval(function() {
+      fetch(`/api/test_runs/${testRunId}/status`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.status !== 'running') {
+            clearInterval(statusCheckInterval);
+            hideLoadingOverlay();
+            
+            // Redirect to results page
+            window.location.href = `/runs/${testRunId}`;
+          } else {
+            // Update progress message
+            updateLoadingMessage(`${data.current_turn ? 'Processing turn ' + data.current_turn : 'Test is running...'}`);
+          }
+        })
+        .catch(error => {
+          console.error('Error checking test status:', error);
+          // Continue polling even if there's an error
+        });
+    }, intervalMs);
+    
+    // Safety timeout after 5 minutes
+    setTimeout(function() {
+      clearInterval(statusCheckInterval);
+      hideLoadingOverlay();
+    }, 5 * 60 * 1000);
+  }

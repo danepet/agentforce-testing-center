@@ -14,7 +14,57 @@
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     
-    {% block head %}{% endblock %}
+    
+    <style>
+        /* Loading overlay styles */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .spinner-container {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            max-width: 90%;
+        }
+
+        .spinner-text {
+            display: block;
+            margin-top: 1rem;
+            font-weight: 500;
+        }
+
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+
+        /* Animation for progress updates */
+        @keyframes fadeInOut {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+        }
+
+        .spinner-text {
+            animation: fadeInOut 2s infinite;
+        }
+    </style>
+    
+    {% block head %}
+    
+    {% endblock %}
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -30,12 +80,62 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('main.index') }}">Home</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.test_list') }}">Test Cases</a>
+                    
+                    <!-- Test Cases Dropdown -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="testCasesDropdown" role="button" data-bs-toggle="dropdown">
+                            Test Cases
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="testCasesDropdown">
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('main.test_list') }}">
+                                    <i class="fas fa-list me-2"></i>All Test Cases
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('main.create_test') }}">
+                                    <i class="fas fa-plus me-2"></i>Create Test Case
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('main.manage_categories') }}">
+                                    <i class="fas fa-folder me-2"></i>Manage Categories
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('main.manage_tags') }}">
+                                    <i class="fas fa-tags me-2"></i>Manage Tags
+                                </a>
+                            </li>
+                        </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.test_runs') }}">Test Runs</a>
+                    
+                    <!-- Test Runs Dropdown -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="testRunsDropdown" role="button" data-bs-toggle="dropdown">
+                            Test Runs
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="testRunsDropdown">
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('main.test_runs') }}">
+                                    <i class="fas fa-history me-2"></i>View All Runs
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('main.run_multiple_tests') }}">
+                                    <i class="fas fa-play me-2"></i>Run Multiple Tests
+                                </a>
+                            </li>
+                        </ul>
                     </li>
+                    
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.dashboard') }}">
+                            <i class="fas fa-chart-line me-1"></i>Dashboard
+                        </a>
+                    </li>
+                    
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('main.settings') }}">Settings</a>
                     </li>
@@ -64,9 +164,104 @@
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     
+    <!-- Loading indicator script -->
+    <script>
+        // Show loading overlay with spinner
+        function showLoadingOverlay(message = 'Running test...') {
+            // Create overlay if it doesn't exist
+            if (!document.getElementById('loadingOverlay')) {
+                const overlay = document.createElement('div');
+                overlay.id = 'loadingOverlay';
+                overlay.className = 'loading-overlay';
+                
+                // Create spinner container
+                const spinnerContainer = document.createElement('div');
+                spinnerContainer.className = 'spinner-container';
+                
+                // Create spinner
+                const spinner = document.createElement('div');
+                spinner.className = 'spinner-border text-primary';
+                spinner.setAttribute('role', 'status');
+                
+                // Create spinner text
+                const spinnerText = document.createElement('span');
+                spinnerText.className = 'spinner-text mt-3';
+                spinnerText.id = 'spinnerText';
+                spinnerText.textContent = message;
+                
+                // Assemble the elements
+                spinnerContainer.appendChild(spinner);
+                spinnerContainer.appendChild(spinnerText);
+                overlay.appendChild(spinnerContainer);
+                
+                // Add the overlay to the body
+                document.body.appendChild(overlay);
+                
+                // Prevent scrolling while overlay is active
+                document.body.style.overflow = 'hidden';
+            } else {
+                // Update message if overlay already exists
+                document.getElementById('spinnerText').textContent = message;
+                document.getElementById('loadingOverlay').style.display = 'flex';
+            }
+        }
+
+        // Hide loading overlay
+        function hideLoadingOverlay() {
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }
+        }
+
+        // Update progress message
+        function updateLoadingMessage(message) {
+            const spinnerText = document.getElementById('spinnerText');
+            if (spinnerText) {
+                spinnerText.textContent = message;
+            }
+        }
+
+        // Function to check test run status periodically
+        function pollTestRunStatus(testRunId, intervalMs = 2000) {
+            if (!testRunId) return;
+            
+            showLoadingOverlay('Test is running...');
+            
+            const statusCheckInterval = setInterval(function() {
+                fetch(`/api/test_runs/${testRunId}/status`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status !== 'running') {
+                            clearInterval(statusCheckInterval);
+                            hideLoadingOverlay();
+                            
+                            // Redirect to results page
+                            window.location.href = `/runs/${testRunId}`;
+                        } else {
+                            // Update progress message
+                            updateLoadingMessage(`${data.current_turn ? 'Processing turn ' + data.current_turn + ' of ' + data.total_turns : 'Test is running...'}`);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error checking test status:', error);
+                        // Continue polling even if there's an error
+                    });
+            }, intervalMs);
+            
+            // Safety timeout after 5 minutes
+            setTimeout(function() {
+                clearInterval(statusCheckInterval);
+                hideLoadingOverlay();
+            }, 5 * 60 * 1000);
+        }
+    </script>
+    
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
+    <script src="{{ url_for('static', filename='js/drag-drop-turns.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -7,6 +7,7 @@ from deepeval.metrics import (
     FaithfulnessMetric
 )
 from deepeval.test_case import LLMTestCase
+from deepeval import evaluate
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,13 @@ class ResponseValidator:
             api_key (str, optional): DeepEval API key
         """
         self.api_key = api_key
+        
+        # Define standard thresholds for metrics
+        self.default_thresholds = {
+            'answer_relevancy': 0.7,
+            'contextual_relevancy': 0.7,
+            'faithfulness': 0.7
+        }
     
     def validate_contains(self, response, expected_text, case_sensitive=True):
         """Check if response contains expected text.
@@ -102,139 +110,138 @@ class ResponseValidator:
                 'matches': []
             }
     
-    def validate_answer_relevancy(self, response, question, threshold=0.7):
-        """Check if response is relevant to the question.
+    def run_deepeval_metrics(self, response, question=None, context=None, metrics=None, thresholds=None):
+        """Run DeepEval metrics on the response.
         
         Args:
             response (str): AI Agent response
-            question (str): Question to check relevance against
-            threshold (float): Minimum score to pass
+            question (str, optional): Question or input that prompted the response
+            context (str, optional): Retrieved context used for the response
+            metrics (list, optional): List of metric names to run
+            thresholds (dict, optional): Custom thresholds for metrics
+            
+        Returns:
+            dict: Results from all run metrics
+        """
+        if metrics is None:
+            # Default to running all available metrics based on inputs
+            metrics = []
+            if question:
+                metrics.append('answer_relevancy')
+            if context:
+                metrics.append('contextual_relevancy')
+                metrics.append('faithfulness')
+        
+        if thresholds is None:
+            thresholds = self.default_thresholds
+        
+        # Create a test case for DeepEval
+        test_case = LLMTestCase(
+            input=question or "",
+            actual_output=response,
+            retrieval_context=[context] if context else []
+        )
+        
+        # Initialize metric instances based on the specified metrics
+        metric_instances = []
+        
+        for metric_name in metrics:
+            if metric_name == 'answer_relevancy':
+                metric_instances.append(
+                    AnswerRelevancyMetric(threshold=thresholds.get('answer_relevancy', self.default_thresholds['answer_relevancy']))
+                )
+            elif metric_name == 'contextual_relevancy':
+                metric_instances.append(
+                    ContextualRelevancyMetric(threshold=thresholds.get('contextual_relevancy', self.default_thresholds['contextual_relevancy']))
+                )
+            elif metric_name == 'faithfulness':
+                metric_instances.append(
+                    FaithfulnessMetric(threshold=thresholds.get('faithfulness', self.default_thresholds['faithfulness']))
+                )
+        
+        # Run all metrics against the test case
+        results = {}
+        
+        for metric in metric_instances:
+            try:
+                # Run the metric
+                metric.measure(test_case)
+                
+                # Store the result
+                metric_name = metric.__class__.__name__.replace('Metric', '').lower()
+                results[metric_name] = {
+                    'type': metric_name,
+                    'passed': metric.is_successful(),
+                    'score': metric.score,
+                    'details': metric.reason or "Evaluation completed"
+                }
+            except Exception as e:
+                logger.error(f"Failed to evaluate {metric.__class__.__name__}: {str(e)}")
+                metric_name = metric.__class__.__name__.replace('Metric', '').lower()
+                results[metric_name] = {
+                    'type': metric_name,
+                    'passed': False,
+                    'score': 0.0,
+                    'details': f"Error evaluating {metric_name}: {str(e)}"
+                }
+        
+        return results
+    
+    def validate_memory_retention(self, response, reference_info, turn_history=None):
+        """Check if the response correctly remembers information from earlier turns.
+        
+        Args:
+            response (str): Current AI Agent response to validate
+            reference_info (str): Key information that should be remembered
+            turn_history (list, optional): List of previous turns for context
             
         Returns:
             dict: Validation result
         """
+        # Basic validation - check if the reference info is in the response
+        basic_contains = self.validate_contains(
+            response=response,
+            expected_text=reference_info,
+            case_sensitive=False
+        )
+        
+        if basic_contains['passed']:
+            return {
+                'type': 'memory_retention',
+                'passed': True,
+                'score': 1.0,
+                'details': f"Agent correctly remembered the reference information: '{reference_info}'"
+            }
+        
+        # More advanced - check if semantically similar information is present
+        # This would ideally use a semantic similarity check
         try:
-            # Create a test case
+            # Create a test case for semantic similarity
             test_case = LLMTestCase(
-                input=question,
+                input="Recall the following information: " + reference_info,
                 actual_output=response
             )
             
-            # Create the metric with the threshold
-            metric = AnswerRelevancyMetric(threshold=threshold)
-            
-            # Measure using the test case
+            # Use answer relevancy as a proxy for memory recall
+            metric = AnswerRelevancyMetric(threshold=0.6)  # Lower threshold for recall
             metric.measure(test_case)
             
-            # Get results
             passed = metric.is_successful()
             score = metric.score
-            reason = metric.reason
             
             return {
-                'type': 'answer_relevancy',
+                'type': 'memory_retention',
                 'passed': passed,
                 'score': score,
-                'details': reason if reason else "Evaluation completed"
+                'details': f"Memory retention check: Agent {'successfully' if passed else 'failed to'} recall information with score {score:.2f}"
             }
         except Exception as e:
-            logger.error(f"Failed to evaluate answer relevancy: {str(e)}")
+            logger.error(f"Error in memory retention validation: {str(e)}")
             return {
-                'type': 'answer_relevancy',
+                'type': 'memory_retention',
                 'passed': False,
                 'score': 0.0,
-                'details': f"Error evaluating answer relevancy: {str(e)}"
-            }
-    
-    def validate_contextual_relevancy(self, response, context, threshold=0.7):
-        """Check if response is contextually relevant.
-        
-        Args:
-            response (str): AI Agent response
-            context (str): Context to check relevance against
-            threshold (float): Minimum score to pass
-            
-        Returns:
-            dict: Validation result
-        """
-        try:
-            # Create a test case
-            # For context, we need to provide it as a list
-            test_case = LLMTestCase(
-                input="",  # Empty input as we're just testing contextual relevance
-                actual_output=response,
-                retrieval_context=[context]
-            )
-            
-            # Create metric
-            metric = ContextualRelevancyMetric(threshold=threshold)
-            
-            # Measure using the test case
-            metric.measure(test_case)
-            
-            # Get results
-            passed = metric.is_successful()
-            score = metric.score
-            reason = metric.reason
-            
-            return {
-                'type': 'contextual_relevancy',
-                'passed': passed,
-                'score': score,
-                'details': reason if reason else "Evaluation completed"
-            }
-        except Exception as e:
-            logger.error(f"Failed to evaluate contextual relevancy: {str(e)}")
-            return {
-                'type': 'contextual_relevancy',
-                'passed': False,
-                'score': 0.0,
-                'details': f"Error evaluating contextual relevancy: {str(e)}"
-            }
-    
-    def validate_faithfulness(self, response, context, threshold=0.7):
-        """Check if response is faithful to the context (factually consistent).
-        
-        Args:
-            response (str): AI Agent response
-            context (str): Context to check faithfulness against
-            threshold (float): Minimum score to pass
-            
-        Returns:
-            dict: Validation result
-        """
-        try:
-            # Create a test case
-            test_case = LLMTestCase(
-                input="",  # Empty input as we're just testing faithfulness
-                actual_output=response,
-                retrieval_context=[context]
-            )
-            
-            # Create the metric
-            metric = FaithfulnessMetric(threshold=threshold)
-            
-            # Measure using the test case
-            metric.measure(test_case)
-            
-            # Get results
-            passed = metric.is_successful()
-            score = metric.score
-            reason = metric.reason
-            
-            return {
-                'type': 'faithfulness',
-                'passed': passed,
-                'score': score,
-                'details': reason if reason else "Evaluation completed"
-            }
-        except Exception as e:
-            logger.error(f"Failed to evaluate faithfulness: {str(e)}")
-            return {
-                'type': 'faithfulness',
-                'passed': False,
-                'score': 0.0,
-                'details': f"Error evaluating faithfulness: {str(e)}"
+                'details': f"Error evaluating memory retention: {str(e)}"
             }
     
     def validate(self, validation_type, response, parameters):
@@ -248,6 +255,7 @@ class ResponseValidator:
         Returns:
             dict: Validation result
         """
+        # Basic validation types
         if validation_type == 'contains':
             return self.validate_contains(
                 response,
@@ -266,24 +274,41 @@ class ResponseValidator:
                 parameters.get('pattern', ''),
                 parameters.get('expected_match', True)
             )
-        elif validation_type == 'answer_relevancy':
-            return self.validate_answer_relevancy(
-                response,
-                parameters.get('question', ''),
-                parameters.get('threshold', 0.7)
+        elif validation_type == 'memory_retention':
+            return self.validate_memory_retention(
+                response=response,
+                reference_info=parameters.get('reference_info', ''),
+                turn_history=parameters.get('turn_history', [])
             )
-        elif validation_type == 'contextual_relevance' or validation_type == 'contextual_relevancy':
-            return self.validate_contextual_relevancy(
-                response,
-                parameters.get('context', ''),
-                parameters.get('threshold', 0.7)
+        
+        # DeepEval metrics
+        elif validation_type in ['answer_relevancy', 'contextual_relevancy', 'faithfulness']:
+            # Extract relevant parameters
+            question = parameters.get('question', '')
+            context = parameters.get('context', '')
+            threshold = parameters.get('threshold', self.default_thresholds.get(validation_type, 0.7))
+            
+            # Create custom thresholds dict for this specific validation
+            thresholds = {validation_type: threshold}
+            
+            # Run the metric
+            results = self.run_deepeval_metrics(
+                response=response,
+                question=question,
+                context=context,
+                metrics=[validation_type],
+                thresholds=thresholds
             )
-        elif validation_type == 'factual_consistency' or validation_type == 'faithfulness':
-            return self.validate_faithfulness(
-                response,
-                parameters.get('context', ''),
-                parameters.get('threshold', 0.7)
-            )
+            
+            # Return the result for the requested metric
+            return results.get(validation_type.replace('_relevancy', '').replace('_', ''), {
+                'type': validation_type,
+                'passed': False,
+                'score': 0.0,
+                'details': f"Failed to evaluate {validation_type}"
+            })
+        
+        # Unknown validation type
         else:
             return {
                 'type': validation_type,
@@ -291,74 +316,3 @@ class ResponseValidator:
                 'score': 0.0,
                 'details': f"Unknown validation type: {validation_type}"
             }
-    
-    def run_all_metrics(self, response, context=None, question=None, thresholds=None):
-        """Run all available metrics on a response.
-        
-        Args:
-            response (str): AI Agent response
-            context (str, optional): Context for context-based metrics
-            question (str, optional): Question for question-based metrics
-            thresholds (dict, optional): Custom thresholds for each metric
-            
-        Returns:
-            dict: Results for all metrics that were run
-        """
-        if thresholds is None:
-            thresholds = {}
-            
-        results = {}
-        
-        # Run metrics that require a question
-        if question:
-            results['answer_relevancy'] = self.validate_answer_relevancy(
-                response, question, thresholds.get('answer_relevancy', 0.7)
-            )
-        
-        # Run metrics that require context
-        if context:
-            results['contextual_relevancy'] = self.validate_contextual_relevancy(
-                response, context, thresholds.get('contextual_relevancy', 0.7)
-            )
-            
-            results['faithfulness'] = self.validate_faithfulness(
-                response, context, thresholds.get('faithfulness', 0.7)
-            )
-        
-        return results
-    
-    def get_overall_score(self, results):
-        """Calculate overall score based on individual metric results.
-        
-        Args:
-            results (dict): Results from running metrics
-            
-        Returns:
-            dict: Overall evaluation including score and passed status
-        """
-        if not results:
-            return {
-                'overall_score': 0.0,
-                'overall_passed': False,
-                'details': "No metrics were evaluated"
-            }
-        
-        total_score = 0.0
-        passed_count = 0
-        total_count = len(results)
-        
-        for metric_name, result in results.items():
-            if result['passed']:
-                passed_count += 1
-            total_score += result['score']
-        
-        average_score = total_score / total_count
-        overall_passed = passed_count / total_count >= 0.7  # Pass if at least 70% of metrics passed
-        
-        return {
-            'overall_score': average_score,
-            'overall_passed': overall_passed,
-            'metrics_passed': passed_count,
-            'metrics_total': total_count,
-            'details': f"Passed {passed_count}/{total_count} metrics with average score of {average_score:.2f}"
-        }

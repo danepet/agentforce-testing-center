@@ -1,48 +1,67 @@
 {% extends "base.html" %}
 
-{% block title %}Run Test Case - AI Agent Testing Center{% endblock %}
+{% block title %}Run Multiple Tests - AI Agent Testing Center{% endblock %}
 
 {% block content %}
 <div class="card shadow-sm">
     <div class="card-header">
         <h2 class="mb-0">
             <i class="fas fa-play-circle text-success me-2"></i>
-            Run Test Case: {{ test_case.name }}
+            Run Multiple Test Cases
         </h2>
     </div>
     <div class="card-body">
-        <p class="lead">You are about to run the following test case against an AI Agent:</p>
+        <p class="lead">Select test cases to run in parallel:</p>
         
-        <div class="mb-4">
-            <h5>Description</h5>
-            <p>{{ test_case.description or 'No description provided.' }}</p>
-        </div>
-        
-        <div class="mb-4">
-            <h5>Conversation Turns</h5>
-            <div class="list-group">
-                {% for turn in test_case.turns|sort(attribute='order') %}
-                <div class="list-group-item">
-                    <h6>Turn {{ loop.index }} - User Input</h6>
-                    <p class="mb-2">{{ turn.user_input }}</p>
-                    
-                    {% if turn.expected_validations %}
-                    <h6 class="mt-3 mb-2 text-muted">Expected Validations</h6>
-                    <ul class="list-unstyled">
-                        {% for validation in turn.expected_validations %}
-                        <li>
-                            <span class="badge bg-secondary">{{ validation.validation_type }}</span>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    {% endif %}
+        <form id="runMultipleForm" method="post">
+            <div class="mb-4">
+                <div class="card">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Select Test Cases</h5>
+                        <div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="selectAllBtn">
+                                Select All
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="deselectAllBtn">
+                                Deselect All
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            {% for test_case in test_cases %}
+                            <div class="col-md-6 mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="{{ test_case.id }}" id="test_{{ test_case.id }}" name="test_ids">
+                                    <label class="form-check-label" for="test_{{ test_case.id }}">
+                                        {{ test_case.name }}
+                                        
+                                        <!-- Show tags if any -->
+                                        {% if test_case.tags %}
+                                        <span>
+                                            {% for tag in test_case.tags %}
+                                            <span class="badge bg-{{ tag.color }} ms-1">{{ tag.name }}</span>
+                                            {% endfor %}
+                                        </span>
+                                        {% endif %}
+                                        
+                                        <!-- Show category if any -->
+                                        {% if test_case.category %}
+                                        <span class="badge bg-secondary ms-1">{{ test_case.category.name }}</span>
+                                        {% endif %}
+                                    </label>
+                                    <small class="text-muted d-block">
+                                        {{ test_case.turns|length }} turn(s)
+                                    </small>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
                 </div>
-                {% endfor %}
             </div>
-        </div>
-        
-        <h5 class="mb-3">AI Agent Credentials</h5>
-        <form id="runTestForm" method="post">
+            
+            <h5 class="mb-3">AI Agent Credentials</h5>
             <div class="row g-3 mb-4">
                 <div class="col-md-6">
                     <label for="sf_org_domain" class="form-label">Salesforce Org Domain</label>
@@ -79,13 +98,13 @@
             
             <div class="alert alert-info">
                 <i class="fas fa-info-circle me-2"></i>
-                You can set default values for credentials in the <a href="{{ url_for('main.settings') }}">Settings</a> page.
+                Tests will be executed in parallel. The system will run up to 3 tests simultaneously.
             </div>
             
             <div class="mt-4">
-                <a href="{{ url_for('main.view_test', test_id=test_case.id) }}" class="btn btn-secondary">Back</a>
+                <a href="{{ url_for('main.test_list') }}" class="btn btn-secondary">Back</a>
                 <button type="submit" class="btn btn-success" id="runTestBtn">
-                    <i class="fas fa-play me-1"></i> Run Test
+                    <i class="fas fa-play me-1"></i> Run Selected Tests
                 </button>
             </div>
         </form>
@@ -95,8 +114,8 @@
 
 {% block scripts %}
 <script>
-    // Fetch default credentials from settings when page loads
-    $(document).ready(function() {
+    // Select/deselect all buttons
+    document.addEventListener('DOMContentLoaded', function() {
         // Check for credentials from localStorage
         const orgDomain = localStorage.getItem('sf_org_domain');
         const clientId = localStorage.getItem('sf_client_id');
@@ -125,21 +144,34 @@
         }
         
         // Save credentials to localStorage when form is submitted
-        $('#runTestForm').submit(function() {
+        $('#runMultipleForm').submit(function() {
             localStorage.setItem('sf_org_domain', $('#sf_org_domain').val());
             localStorage.setItem('sf_client_id', $('#sf_client_id').val());
             localStorage.setItem('sf_client_secret', $('#sf_client_secret').val());
             localStorage.setItem('sf_agent_id', $('#sf_agent_id').val());
             localStorage.setItem('html_selector', $('#html_selector').val());
             
+            // Check if at least one test is selected
+            const selectedTests = $('input[name="test_ids"]:checked').length;
+            if (selectedTests === 0) {
+                alert('Please select at least one test case to run.');
+                return false;
+            }
+            
             // Show loading overlay
             showLoadingOverlay('Initializing test run...');
             
-            // Simulate progress updates
-            setTimeout(() => updateLoadingMessage('Connecting to AI Agent...'), 1500);
-            setTimeout(() => updateLoadingMessage('Starting conversation...'), 3000);
-            
             return true;
+        });
+        
+        // Select All button
+        $('#selectAllBtn').click(function() {
+            $('input[name="test_ids"]').prop('checked', true);
+        });
+        
+        // Deselect All button
+        $('#deselectAllBtn').click(function() {
+            $('input[name="test_ids"]').prop('checked', false);
         });
     });
 </script>

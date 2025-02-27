@@ -8,8 +8,14 @@ logger = logging.getLogger(__name__)
 class BrowserScraper:
     """Scraper that uses a headless browser to bypass anti-scraping protections."""
     
-    async def _scrape_with_browser(self, url):
-        """Use Playwright to scrape a URL with a full browser."""
+    async def _scrape_with_browser(self, url, selector=None):
+        """Use Playwright to scrape a URL with a full browser.
+        
+        Args:
+            url (str): The URL to scrape
+            selector (str, optional): CSS selector to target specific content
+                                     Default is None, which gets the entire page content
+        """
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             try:
@@ -26,19 +32,25 @@ class BrowserScraper:
                 # Extract content
                 title = await page.title()
 
-                selector = "#main"  
+                # Use provided selector if available, otherwise use a default
+                content_selector = selector if selector else "body"
                 
-                # Wait for the element to appear on the page
-                await page.wait_for_selector(selector)
-                
-                # Extract the text content from the specified element
-                text_content = await page.locator(selector).inner_text()
+                try:
+                    # Wait for the element to appear on the page (with a reasonable timeout)
+                    await page.wait_for_selector(content_selector, timeout=5000)
+                    
+                    # Extract the text content from the specified element
+                    text_content = await page.locator(content_selector).inner_text()
+                except Exception as e:
+                    logger.warning(f"Could not find selector '{content_selector}' on page. Falling back to body content: {str(e)}")
+                    text_content = await page.locator("body").inner_text()
                 
                 return {
                     'url': url,
                     'success': True,
                     'title': title,
-                    'content': text_content
+                    'content': text_content,
+                    'selector_used': content_selector
                 }
             except Exception as e:
                 logger.error(f"Error scraping {url} with browser: {str(e)}")
@@ -51,11 +63,16 @@ class BrowserScraper:
             finally:
                 await browser.close()
     
-    def scrape_url(self, url):
-        """Synchronous wrapper around async browser scraping."""
+    def scrape_url(self, url, selector=None):
+        """Synchronous wrapper around async browser scraping.
+        
+        Args:
+            url (str): The URL to scrape
+            selector (str, optional): CSS selector to target specific content
+        """
         try:
             # Run the async scraping in a new event loop
-            return asyncio.run(self._scrape_with_browser(url))
+            return asyncio.run(self._scrape_with_browser(url, selector))
         except Exception as e:
             logger.error(f"Failed to scrape URL with browser: {str(e)}")
             return {
@@ -65,9 +82,14 @@ class BrowserScraper:
                 'content': None
             }
     
-    def scrape_multiple_urls(self, urls):
-        """Scrape multiple URLs sequentially with a browser."""
+    def scrape_multiple_urls(self, urls, selector=None):
+        """Scrape multiple URLs sequentially with a browser.
+        
+        Args:
+            urls (list): List of URLs to scrape
+            selector (str, optional): CSS selector to target specific content
+        """
         results = {}
         for url in urls:
-            results[url] = self.scrape_url(url)
+            results[url] = self.scrape_url(url, selector)
         return results

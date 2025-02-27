@@ -3,14 +3,138 @@ import logging
 import time
 from datetime import datetime
 from app import db
-from app.models import TestCase, TestRun, TurnResult, ValidationResult, ConversationTurn, ExpectedValidation
+from app.models import TestCase, TestRun, TurnResult, ValidationResult, ConversationTurn, ExpectedValidation, TestMetrics
 from app.agent_connector import AgentConnector, AgentConfig, extract_response_text
 from app.scraper import WebScraper
 from app.browser_scraper import BrowserScraper
 from app.validator import ResponseValidator
+import concurrent.futures
+from threading import Lock
+
 
 logger = logging.getLogger(__name__)
-
+class ParallelTestRunner:
+    """Runner for executing multiple test cases in parallel."""
+    
+    def __init__(self, config, max_workers=3):
+        """Initialize the parallel test runner.
+        
+        Args:
+            config: Application configuration
+            max_workers (int): Maximum number of concurrent tests
+        """
+        self.config = config
+        self.max_workers = max_workers
+        self.test_runs = {}  # Track running tests
+        self.status_lock = Lock()  # Thread safety for status updates
+    
+    def run_test_case(self, test_case_id, html_selector=None, credentials=None):
+        """Run a single test case - used as worker function for parallel execution.
+        
+        Args:
+            test_case_id (int): ID of the test case to run
+            html_selector (str, optional): CSS selector for web scraping
+            credentials (dict, optional): Salesforce credentials
+            
+        Returns:
+            int: Test run ID
+        """
+        try:
+            # Create a new test runner for this test
+            test_runner = TestRunner(self.config)
+            
+            # Update credentials if provided
+            if credentials:
+                agent_config = AgentConfig(
+                    sf_org_domain=credentials.get('org_domain', ''),
+                    client_id=credentials.get('client_id', ''),
+                    client_secret=credentials.get('client_secret', ''),
+                    agent_id=credentials.get('agent_id', '')
+                )
+                test_runner.agent_connector = AgentConnector(config=agent_config)
+            
+            # Run the test
+            test_run_id = test_runner.run_test(test_case_id, html_selector)
+            
+            # Update status
+            with self.status_lock:
+                if test_case_id in self.test_runs:
+                    self.test_runs[test_case_id]['status'] = 'completed'
+                    self.test_runs[test_case_id]['test_run_id'] = test_run_id
+            
+            return test_run_id
+            
+        except Exception as e:
+            logger.error(f"Error in parallel test execution for test case {test_case_id}: {str(e)}")
+            
+            # Update status
+            with self.status_lock:
+                if test_case_id in self.test_runs:
+                    self.test_runs[test_case_id]['status'] = 'failed'
+                    self.test_runs[test_case_id]['error'] = str(e)
+            
+            raise
+    
+    def run_multiple_tests(self, test_case_ids, html_selector=None, credentials=None):
+        """Run multiple test cases in parallel.
+        
+        Args:
+            test_case_ids (list): List of test case IDs to run
+            html_selector (str, optional): CSS selector for web scraping
+            credentials (dict, optional): Salesforce credentials
+            
+        Returns:
+            dict: Status of all test runs
+        """
+        # Initialize status tracking for each test
+        with self.status_lock:
+            for test_id in test_case_ids:
+                self.test_runs[test_id] = {
+                    'status': 'queued',
+                    'test_run_id': None,
+                    'error': None,
+                    'test_case_name': TestCase.query.get(test_id).name
+                }
+        
+        # Use ThreadPoolExecutor for parallel execution
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Submit all tasks
+            future_to_test_id = {}
+            for test_id in test_case_ids:
+                # Update status to running
+                with self.status_lock:
+                    self.test_runs[test_id]['status'] = 'running'
+                
+                # Submit the task
+                future = executor.submit(
+                    self.run_test_case, 
+                    test_id, 
+                    html_selector, 
+                    credentials
+                )
+                future_to_test_id[future] = test_id
+            
+            # Process results as they complete
+            for future in concurrent.futures.as_completed(future_to_test_id):
+                test_id = future_to_test_id[future]
+                try:
+                    test_run_id = future.result()
+                    logger.info(f"Test case {test_id} completed with test run ID {test_run_id}")
+                except Exception as e:
+                    logger.error(f"Test case {test_id} failed: {str(e)}")
+        
+        # Return the final status of all tests
+        return dict(self.test_runs)
+    
+    def get_status(self):
+        """Get the current status of all test runs.
+        
+        Returns:
+            dict: Status of all test runs
+        """
+        with self.status_lock:
+            return dict(self.test_runs)
+        
 class TestRunner:
     """Runner for executing test cases against an AI Agent."""
     
@@ -49,12 +173,17 @@ class TestRunner:
         self.validator = ResponseValidator(
             api_key=config.get('DEEPEVAL_API_KEY', '')
         )
+        
+        # Current test run status for progress updates
+        self.current_test_run = None
+        self.current_turn = None
     
-    def scrape_urls(self, urls):
+    def scrape_urls(self, urls, html_selector=None):
         """Scrape content from multiple URLs, using the appropriate scraper for each domain.
         
         Args:
             urls (list): List of URLs to scrape
+            html_selector (str, optional): CSS selector to target specific content
             
         Returns:
             dict: Dictionary mapping URLs to their scraped content
@@ -66,10 +195,10 @@ class TestRunner:
                 # Check if domain is in problematic list
                 if any(domain in url for domain in self.problematic_domains):
                     logger.info(f"Using browser scraper for potentially protected domain: {url}")
-                    results[url] = self.browser_scraper.scrape_url(url)
+                    results[url] = self.browser_scraper.scrape_url(url, html_selector)
                 else:
                     # Use regular scraper for other domains
-                    results[url] = self.scraper.scrape_url(url)
+                    results[url] = self.scraper.scrape_url(url, html_selector)
             except Exception as e:
                 logger.error(f"Error scraping URL {url}: {str(e)}")
                 results[url] = {
@@ -81,15 +210,18 @@ class TestRunner:
         
         return results
     
-    def run_test(self, test_case_id):
-        """Run a test case.
+    def run_test(self, test_case_id, html_selector=None):
+        """Run a test case with metrics collection.
         
         Args:
             test_case_id (int): ID of the test case to run
+            html_selector (str, optional): CSS selector for web scraping
             
         Returns:
             int: ID of the test run
         """
+        import time
+        
         # Get the test case
         test_case = TestCase.query.get(test_case_id)
         if not test_case:
@@ -103,12 +235,18 @@ class TestRunner:
         db.session.add(test_run)
         db.session.commit()
         
+        # Store current test run info for status updates
+        self.current_test_run = test_run.id
+        self.current_turn = 0
+        
         try:
             # Initialize the agent connector and start a session
             try:
                 # Create a session with a unique identifier based on the test run ID
+                start_time = time.time()
                 session_data = self.agent_connector.start_session(f"testrun_{test_run.id}")
-                logger.info(f"Started session: {self.agent_connector.session_id}")
+                session_setup_time = int((time.time() - start_time) * 1000)  # in milliseconds
+                logger.info(f"Started session: {self.agent_connector.session_id} in {session_setup_time}ms")
             except Exception as e:
                 logger.error(f"Failed to start agent session: {str(e)}")
                 raise Exception(f"Failed to start a session with the AI Agent: {str(e)}")
@@ -117,35 +255,48 @@ class TestRunner:
             turns = ConversationTurn.query.filter_by(test_case_id=test_case_id).order_by(ConversationTurn.order).all()
             
             # Process each turn
-            for turn in turns:
-                # Send message to agent
+            for i, turn in enumerate(turns):
+                # Update current turn number for status tracking
+                self.current_turn = i + 1
+                
+                # Send message to agent and track response time
                 try:
+                    start_time = time.time()
                     agent_response_data = self.agent_connector.send_message(turn.user_input)
+                    response_time_ms = int((time.time() - start_time) * 1000)  # in milliseconds
                     
                     # Extract agent response text using our helper
                     agent_response = extract_response_text(agent_response_data)
+                    logger.info(f"Got response for turn {i+1} in {response_time_ms}ms")
                 except Exception as e:
                     logger.error(f"Failed to get response from AI Agent: {str(e)}")
                     raise Exception(f"Failed to get response from AI Agent: {str(e)}")
                 
-                # Note: Conversation history is maintained by the Salesforce API session
-                # We don't need to pass it explicitly with each message
-                
                 # Check for URLs in the response
                 urls = self.scraper.extract_urls(agent_response)
                 scraped_content = None
+                scraping_time_ms = 0
                 
                 # Scrape URLs if found
                 if urls:
                     try:
-                        # Use the new scrape_urls method that handles problematic domains
-                        scrape_results = self.scrape_urls(urls)
+                        # Track scraping time
+                        start_time = time.time()
+                        
+                        # Use the scrape_urls method that handles problematic domains and HTML selectors
+                        scrape_results = self.scrape_urls(urls, html_selector)
+                        
+                        # Calculate scraping time
+                        scraping_time_ms = int((time.time() - start_time) * 1000)  # in milliseconds
+                        logger.info(f"Scraped {len(urls)} URLs in {scraping_time_ms}ms")
                         
                         # Combine scraped content for validation
                         scraped_texts = []
                         for url, result in scrape_results.items():
                             if result['success'] and result['content']:
+                                scraped_texts.append(f"Content from {url}:")
                                 scraped_texts.append(result['content'])
+                                scraped_texts.append("---")
                         
                         if scraped_texts:
                             scraped_content = '\n\n'.join(scraped_texts)
@@ -153,12 +304,13 @@ class TestRunner:
                         logger.warning(f"Error scraping URLs: {str(e)}")
                         # Continue with the test even if scraping fails
                 
-                # Create turn result
+                # Create turn result with response time
                 turn_result = TurnResult(
                     test_run_id=test_run.id,
                     turn_id=turn.id,
                     agent_response=agent_response,
-                    scraped_content=scraped_content
+                    scraped_content=scraped_content,
+                    response_time_ms=response_time_ms  # Store response time
                 )
                 db.session.add(turn_result)
                 db.session.commit()
@@ -166,21 +318,35 @@ class TestRunner:
                 # Get expected validations for this turn
                 validations = ExpectedValidation.query.filter_by(turn_id=turn.id).all()
                 
+                # Collect failure details for analysis
+                failure_details = []
+                
                 # Run validations
                 for validation in validations:
                     validation_type = validation.validation_type
                     parameters = validation.get_parameters()
                     
-                    # Add scraped content to context if available
-                    if scraped_content and validation_type in ['factual_consistency', 'contextual_relevance', 'faithfulness']:
+                    # Add scraped content to context if available and appropriate
+                    if scraped_content and validation_type in ['contextual_relevancy', 'faithfulness']:
                         if 'context' in parameters:
                             parameters['context'] = f"{parameters['context']}\n\n{scraped_content}"
                         else:
                             parameters['context'] = scraped_content
                     
-                    # Run validation
+                    # Run validation and track time
                     try:
+                        start_time = time.time()
                         result = self.validator.validate(validation_type, agent_response, parameters)
+                        validation_time_ms = int((time.time() - start_time) * 1000)  # in milliseconds
+                        
+                        # Collect detailed info about failures
+                        if not result['passed']:
+                            failure_details.append({
+                                'type': validation_type,
+                                'details': result.get('details', ''),
+                                'score': result.get('score', 0.0),
+                                'expected': parameters
+                            })
                         
                         # Create validation result
                         validation_result = ValidationResult(
@@ -188,7 +354,10 @@ class TestRunner:
                             validation_id=validation.id,
                             is_passed=result['passed'],
                             score=result.get('score'),
-                            details=json.dumps(result)
+                            details=json.dumps({
+                                **result,
+                                'validation_time_ms': validation_time_ms
+                            })
                         )
                         db.session.add(validation_result)
                         db.session.commit()
@@ -209,6 +378,19 @@ class TestRunner:
                         )
                         db.session.add(validation_result)
                         db.session.commit()
+                        
+                        # Add to failure details
+                        failure_details.append({
+                            'type': validation_type,
+                            'details': f"Validation error: {str(e)}",
+                            'score': 0.0,
+                            'expected': parameters
+                        })
+                
+                # Save failure analysis to the turn result if any failures occurred
+                if failure_details:
+                    turn_result.failure_analysis = json.dumps(failure_details)
+                    db.session.commit()
             
             # End session and mark test run as completed
             try:
@@ -221,6 +403,17 @@ class TestRunner:
             test_run.status = 'completed'
             test_run.completed_at = datetime.utcnow()
             db.session.commit()
+            
+            # Generate metrics for this test run
+            try:
+                TestMetrics.create_from_test_run(test_run.id)
+            except Exception as e:
+                logger.error(f"Error creating test metrics: {str(e)}")
+                # Continue even if metrics creation fails
+            
+            # Clear current test run status
+            self.current_test_run = None
+            self.current_turn = None
             
             return test_run.id
             
@@ -237,7 +430,41 @@ class TestRunner:
             test_run.status = 'failed'
             test_run.completed_at = datetime.utcnow()
             db.session.commit()
+            
+            # Clear current test run status
+            self.current_test_run = None
+            self.current_turn = None
+            
             raise
+
+    def get_test_run_status(self, test_run_id):
+        """Get the current status of a test run.
+        
+        Args:
+            test_run_id (int): ID of the test run
+            
+        Returns:
+            dict: Current status information
+        """
+        test_run = TestRun.query.get(test_run_id)
+        if not test_run:
+            raise ValueError(f"Test run with ID {test_run_id} not found")
+        
+        status_info = {
+            'id': test_run.id,
+            'status': test_run.status,
+            'started_at': test_run.started_at.isoformat() if test_run.started_at else None,
+            'completed_at': test_run.completed_at.isoformat() if test_run.completed_at else None
+        }
+        
+        # Add current turn information if available and test is still running
+        if test_run.status == 'running' and self.current_test_run == test_run_id:
+            status_info['current_turn'] = self.current_turn
+            turn_count = ConversationTurn.query.filter_by(test_case_id=test_run.test_case_id).count()
+            status_info['total_turns'] = turn_count
+            status_info['progress_percent'] = int((self.current_turn / turn_count) * 100) if turn_count > 0 else 0
+        
+        return status_info
     
     def get_test_results(self, test_run_id):
         """Get results for a test run.

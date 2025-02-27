@@ -106,6 +106,96 @@ pre code {
     margin-bottom: 0;
 }
 
+/* Loading overlay styles */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+  }
+  
+  .spinner-container {
+    background-color: white;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    text-align: center;
+    max-width: 90%;
+  }
+  
+  .spinner-text {
+    display: block;
+    margin-top: 1rem;
+    font-weight: 500;
+  }
+  
+  .spinner-border {
+    width: 3rem;
+    height: 3rem;
+  }
+  
+  /* Animation for progress updates */
+  @keyframes fadeInOut {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; }
+    100% { opacity: 0.7; }
+  }
+  
+  .spinner-text {
+    animation: fadeInOut 2s infinite;
+  }
+
+  /* Drag handle for turn cards */
+.drag-handle {
+    cursor: grab;
+    margin-right: 10px;
+    color: #a9a9a9;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.drag-handle:hover {
+    color: #666;
+}
+
+/* Drag and drop styles */
+.turn-card-ghost {
+    opacity: 0.5;
+    background: #f8f9fa;
+}
+
+.turn-card-chosen {
+    background-color: #e9f4ff;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.turn-card-drag {
+    opacity: 0.8;
+}
+
+/* Turn card styles */
+.turn-card {
+    margin-bottom: 1.5rem;
+    border-left: 4px solid #6c757d;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.turn-card .card-header {
+    display: flex;
+    align-items: center;
+    background-color: #f8f9fa;
+}
+
+.turn-card:hover {
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.05);
+}
+
 /* For small screens */
 @media (max-width: 768px) {
     .card-header {

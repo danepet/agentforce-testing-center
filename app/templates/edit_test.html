@@ -36,7 +36,12 @@
                 {% for turn in turns %}
                 <div class="card mb-3 turn-card" id="turn_{{ loop.index0 }}_card">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">Turn {{ loop.index }} - User Input</h5>
+                        <h5 class="mb-0">
+                            <div class="drag-handle">
+                                <i class="fas fa-grip-vertical"></i>
+                            </div>
+                            Turn {{ loop.index }} - User Input
+                        </h5>
                         <button type="button" class="btn btn-sm btn-outline-danger remove-turn-btn" data-turn="{{ loop.index0 }}">
                             <i class="fas fa-times"></i>
                         </button>
