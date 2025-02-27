@@ -158,7 +158,7 @@
                                                 <tr class="{% if validation.passed %}table-success{% else %}table-danger{% endif %}">
                                                     <td>{{ validation.type }}</td>
                                                     <td>
-                                                        <pre class="small mb-0"><code>{{ validation.parameters|tojson(indent=2) }}</code></pre>
+                                                        <pre class="small mb-0" style="width:300px"><code>{{ validation.parameters|tojson(indent=2) }}</code></pre>
                                                     </td>
                                                     <td>
                                                         {% if validation.passed %}

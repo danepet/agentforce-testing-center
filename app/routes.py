@@ -741,28 +741,6 @@ def delete_category(category_id):
     
     return redirect(url_for('main.manage_categories'))
 
-@main_bp.route('/categories/<int:category_id>/delete', methods=['POST'])
-def delete_category(category_id):
-    """Delete a category."""
-    try:
-        category = Category.query.get_or_404(category_id)
-        
-        # Check if category is in use
-        test_cases = TestCase.query.filter_by(category_id=category_id).all()
-        if test_cases:
-            flash(f'Cannot delete category "{category.name}" because it is used by {len(test_cases)} test cases', 'warning')
-            return redirect(url_for('main.manage_categories'))
-        
-        db.session.delete(category)
-        db.session.commit()
-        
-        flash(f'Category "{category.name}" deleted successfully', 'success')
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error deleting category: {str(e)}")
-        flash(f'Error deleting category: {str(e)}', 'error')
-    
-    return redirect(url_for('main.manage_categories'))
 
 @main_bp.route('/tests/<int:test_id>/tags', methods=['POST'])
 def update_test_tags(test_id):

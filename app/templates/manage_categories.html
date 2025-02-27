@@ -95,7 +95,7 @@
                 <h5 class="modal-title">Edit Category</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="{{ url_for('main.edit_category') }}" method="post" id="editCategoryForm">
+            <form action="{{ url_for('main.edit_category', category_id=0) }}" method="post" id="editCategoryForm">
                 <div class="modal-body">
                     <input type="hidden" name="category_id" id="editCategoryId">
                     <div class="mb-3">

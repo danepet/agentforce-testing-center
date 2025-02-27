@@ -9,6 +9,7 @@ from deepeval.metrics import (
 from deepeval.test_case import LLMTestCase
 from deepeval import evaluate
 
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 class ResponseValidator:
@@ -287,7 +288,9 @@ class ResponseValidator:
             question = parameters.get('question', '')
             context = parameters.get('context', '')
             threshold = parameters.get('threshold', self.default_thresholds.get(validation_type, 0.7))
-            
+            logger.debug("Question: %s", question)
+            logger.debug("Context: %s", context)
+            logger.debug("threshold: %s", threshold)
             # Create custom thresholds dict for this specific validation
             thresholds = {validation_type: threshold}
             
@@ -299,9 +302,11 @@ class ResponseValidator:
                 metrics=[validation_type],
                 thresholds=thresholds
             )
+
+            logger.debug(results)
             
             # Return the result for the requested metric
-            return results.get(validation_type.replace('_relevancy', '').replace('_', ''), {
+            return results.get(validation_type.replace('_', ''), {
                 'type': validation_type,
                 'passed': False,
                 'score': 0.0,
