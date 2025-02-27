@@ -4,7 +4,7 @@ import io
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, Response
 from app import db
 from app.models import TestCase, ConversationTurn, ExpectedValidation, TestRun, TurnResult, ValidationResult, Tag, Category, TestMetrics
-from app.test_runner import TestRunner
+from app.test_runner import TestRunner, ParallelTestRunner, AsyncTestRunner
 from app.agent_connector import AgentConnector, AgentConfig
 from datetime import datetime
 from app.test_runner import TestRunner, ParallelTestRunner
@@ -149,42 +149,48 @@ def edit_test(test_id):
     
     if request.method == 'POST':
         try:
-            # Update test case
+            # Update test case basic info
             test_case.name = request.form.get('name')
             test_case.description = request.form.get('description')
             db.session.commit()
             
             # Get existing turns
-            existing_turns = ConversationTurn.query.filter_by(test_case_id=test_id).all()
-            existing_turn_ids = [turn.id for turn in existing_turns]
+            existing_turns = {turn.id: turn for turn in ConversationTurn.query.filter_by(test_case_id=test_id).all()}
             
             # Get updated turn data
             turn_count = int(request.form.get('turn_count', 0))
             updated_turn_ids = []
             
+            # Track old to new ID mapping for validations that need to be moved
+            id_mapping = {}
+            
             for i in range(turn_count):
-                turn_id = request.form.get(f'turn_{i}_id')
+                turn_id_str = request.form.get(f'turn_{i}_id')
                 order = i + 1
                 user_input = request.form.get(f'turn_{i}_input')
                 
-                if turn_id and turn_id.isdigit():
-                    # Update existing turn
-                    turn_id = int(turn_id)
-                    turn = ConversationTurn.query.get(turn_id)
+                if not user_input:  # Skip empty inputs
+                    continue
                     
-                    if turn:
+                if turn_id_str and turn_id_str.isdigit():
+                    turn_id = int(turn_id_str)
+                    
+                    # Update existing turn
+                    if turn_id in existing_turns:
+                        turn = existing_turns[turn_id]
                         turn.order = order
                         turn.user_input = user_input
                         updated_turn_ids.append(turn_id)
                     else:
-                        # Create new turn
+                        # Create new turn with specified ID
                         turn = ConversationTurn(
+                            id=turn_id,
                             test_case_id=test_id,
                             order=order,
                             user_input=user_input
                         )
                         db.session.add(turn)
-                        db.session.commit()
+                        db.session.flush()  # Get the ID
                         updated_turn_ids.append(turn.id)
                 else:
                     # Create new turn
@@ -194,49 +200,47 @@ def edit_test(test_id):
                         user_input=user_input
                     )
                     db.session.add(turn)
-                    db.session.commit()
+                    db.session.flush()  # Get the ID before committing
+                    id_mapping[i] = turn.id  # Map the form index to the actual DB ID
                     updated_turn_ids.append(turn.id)
                 
                 # Handle validations for this turn
-                if turn_id and turn_id.isdigit():
-                    turn_id = int(turn_id)
-                    turn = ConversationTurn.query.get(turn_id)
-                else:
-                    turn = ConversationTurn.query.filter_by(test_case_id=test_id, order=order).first()
+                current_turn_id = turn.id
                 
-                if turn:
-                    # Clear existing validations
-                    ExpectedValidation.query.filter_by(turn_id=turn.id).delete()
+                # Clear existing validations for this turn
+                ExpectedValidation.query.filter_by(turn_id=current_turn_id).delete()
+                
+                # Add updated validations
+                validation_count = int(request.form.get(f'turn_{i}_validation_count', 0))
+                
+                for j in range(validation_count):
+                    validation_type = request.form.get(f'turn_{i}_validation_{j}_type')
+                    parameters_json = request.form.get(f'turn_{i}_validation_{j}_parameters')
                     
-                    # Add updated validations
-                    validation_count = int(request.form.get(f'turn_{i}_validation_count', 0))
-                    
-                    for j in range(validation_count):
-                        validation_type = request.form.get(f'turn_{i}_validation_{j}_type')
-                        parameters_json = request.form.get(f'turn_{i}_validation_{j}_parameters')
-                        
-                        if validation_type and parameters_json:
-                            try:
-                                parameters = json.loads(parameters_json)
-                                
-                                # Create validation
-                                validation = ExpectedValidation(
-                                    turn_id=turn.id,
-                                    validation_type=validation_type,
-                                    validation_parameters=parameters_json
-                                )
-                                db.session.add(validation)
-                            except json.JSONDecodeError:
-                                flash(f'Invalid JSON for validation parameters in turn {order}', 'error')
+                    if validation_type and parameters_json:
+                        try:
+                            # Verify JSON is valid
+                            json.loads(parameters_json)
+                            
+                            # Create validation
+                            validation = ExpectedValidation(
+                                turn_id=current_turn_id,
+                                validation_type=validation_type,
+                                validation_parameters=parameters_json
+                            )
+                            db.session.add(validation)
+                        except json.JSONDecodeError:
+                            flash(f'Invalid JSON for validation parameters in turn {order}', 'error')
             
             # Delete turns that were removed
-            for turn_id in existing_turn_ids:
+            for turn_id, turn in existing_turns.items():
                 if turn_id not in updated_turn_ids:
-                    ConversationTurn.query.filter_by(id=turn_id).delete()
+                    # This will also delete associated validations due to cascade
+                    db.session.delete(turn)
             
             db.session.commit()
             flash('Test case updated successfully', 'success')
-            return redirect(url_for('main.test_list'))
+            return redirect(url_for('main.view_test', test_id=test_id))
         
         except Exception as e:
             db.session.rollback()
@@ -277,9 +281,17 @@ def run_test(test_id):
             # Get HTML selector if provided
             html_selector = request.form.get('html_selector')
             
-            # Create test runner
+            # Get test runner mode
+            runner_mode = request.form.get('runner_mode', 'async')  # Default to async
+            
+            # Create the appropriate test runner
             from flask import current_app
-            test_runner = TestRunner(current_app.config)
+            if runner_mode == 'async':
+                # Use the new asynchronous test runner
+                test_runner = AsyncTestRunner(current_app.config)
+            else:
+                # Use the original synchronous test runner
+                test_runner = TestRunner(current_app.config)
             
             # Update credentials
             agent_config = AgentConfig(
@@ -811,14 +823,29 @@ def run_multiple_tests():
             test_ids = [int(id) for id in selected_test_ids]
             
             # Get credentials
-            credentials = get_sf_credentials()
+            credentials = {
+                'org_domain': request.form.get('sf_org_domain', ''),
+                'client_id': request.form.get('sf_client_id', ''),
+                'client_secret': request.form.get('sf_client_secret', ''),
+                'agent_id': request.form.get('sf_agent_id', '')
+            }
             
             # Get HTML selector
-            html_selector = request.form.get('html_selector')
+            html_selector = request.form.get('html_selector', '')
             
             # Create parallel test runner
             from flask import current_app
             parallel_runner = ParallelTestRunner(current_app.config)
+            
+            # Generate a batch ID for this run
+            import uuid
+            batch_id = str(uuid.uuid4())
+            
+            # Store the parallel runner in app context for status checks
+            if not hasattr(current_app, 'parallel_runners'):
+                current_app.parallel_runners = {}
+            
+            current_app.parallel_runners[batch_id] = parallel_runner
             
             # Start test execution in a background thread to avoid blocking
             import threading
@@ -828,15 +855,6 @@ def run_multiple_tests():
             )
             thread.daemon = True
             thread.start()
-            
-            # Store the parallel runner in app context for status checks
-            if not hasattr(current_app, 'parallel_runners'):
-                current_app.parallel_runners = {}
-            
-            # Generate a batch ID for this run
-            import uuid
-            batch_id = str(uuid.uuid4())
-            current_app.parallel_runners[batch_id] = parallel_runner
             
             flash(f'Started execution of {len(test_ids)} test cases', 'success')
             return redirect(url_for('main.batch_status', batch_id=batch_id))
@@ -872,16 +890,26 @@ def batch_status_api(batch_id):
     if not hasattr(current_app, 'parallel_runners') or batch_id not in current_app.parallel_runners:
         return jsonify({'error': 'Batch not found or expired'}), 404
     
-    parallel_runner = current_app.parallel_runners[batch_id]
-    status = parallel_runner.get_status()
-    
-    return jsonify({
-        'batch_id': batch_id,
-        'status': status,
-        'completed': all(test['status'] in ['completed', 'failed'] for test in status.values()),
-        'tests_total': len(status),
-        'tests_completed': sum(1 for test in status.values() if test['status'] == 'completed'),
-        'tests_failed': sum(1 for test in status.values() if test['status'] == 'failed'),
-        'tests_running': sum(1 for test in status.values() if test['status'] == 'running'),
-        'tests_queued': sum(1 for test in status.values() if test['status'] == 'queued')
-    })
+    try:
+        parallel_runner = current_app.parallel_runners[batch_id]
+        status = parallel_runner.get_status()
+        
+        # Format the response correctly
+        response_data = {
+            'batch_id': batch_id,
+            'status': status,
+            'completed': all(test['status'] in ['completed', 'failed'] for test in status.values()),
+            'tests_total': len(status),
+            'tests_completed': sum(1 for test in status.values() if test['status'] == 'completed'),
+            'tests_failed': sum(1 for test in status.values() if test['status'] == 'failed'),
+            'tests_running': sum(1 for test in status.values() if test['status'] == 'running'),
+            'tests_queued': sum(1 for test in status.values() if test['status'] == 'queued')
+        }
+        
+        return jsonify(response_data)
+    except Exception as e:
+        logger.error(f"Error retrieving batch status: {str(e)}")
+        return jsonify({
+            'error': 'Failed to retrieve batch status',
+            'details': str(e)
+        }), 500

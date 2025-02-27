@@ -3,7 +3,7 @@
 {% block title %}Batch Test Status - AI Agent Testing Center{% endblock %}
 
 {% block content %}
-<div class="card shadow-sm">
+<div class="card shadow-sm" data-batch-id="{{ batch_id }}">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h2 class="mb-0">
             <i class="fas fa-tasks text-primary me-2"></i>
@@ -99,10 +99,10 @@
         <div class="mb-4">
             <h5>Overall Progress</h5>
             <div class="progress" style="height: 25px;">
-                {% set completed_pct = (status.values()|selectattr('status', 'equalto', 'completed')|list|length / status|length * 100)|int %}
-                {% set running_pct = (status.values()|selectattr('status', 'equalto', 'running')|list|length / status|length * 100)|int %}
-                {% set failed_pct = (status.values()|selectattr('status', 'equalto', 'failed')|list|length / status|length * 100)|int %}
-                {% set queued_pct = (status.values()|selectattr('status', 'equalto', 'queued')|list|length / status|length * 100)|int %}
+                {% set completed_pct = (status.values()|selectattr('status', 'equalto', 'completed')|list|length / status|length * 100)|int if status|length > 0 else 0 %}
+                {% set running_pct = (status.values()|selectattr('status', 'equalto', 'running')|list|length / status|length * 100)|int if status|length > 0 else 0 %}
+                {% set failed_pct = (status.values()|selectattr('status', 'equalto', 'failed')|list|length / status|length * 100)|int if status|length > 0 else 0 %}
+                {% set queued_pct = (status.values()|selectattr('status', 'equalto', 'queued')|list|length / status|length * 100)|int if status|length > 0 else 0 %}
                 
                 <div class="progress-bar bg-success" role="progressbar" style="width: {{ completed_pct }}%" id="completedProgressBar">
                     {{ completed_pct }}% Completed
@@ -187,7 +187,12 @@
 {% block scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const batchId = '{{ batch_id }}';
+        const batchId = document.querySelector('[data-batch-id]')?.getAttribute('data-batch-id');
+        
+        if (!batchId) {
+            console.error('Batch ID not found');
+            return;
+        }
         
         // Poll status every 3 seconds
         const statusInterval = setInterval(updateStatus, 3000);
@@ -195,8 +200,18 @@
         // Update status function
         function updateStatus() {
             fetch(`/api/tests/batch/${batchId}/status`)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
                 .then(data => {
+                    if (!data || !data.status) {
+                        console.error('Invalid response data', data);
+                        return;
+                    }
+                    
                     // Update status counters
                     document.getElementById('testsTotal').textContent = data.tests_total;
                     document.getElementById('testsCompleted').textContent = data.tests_completed;
@@ -277,6 +292,9 @@
                     console.error('Error fetching batch status:', error);
                 });
         }
+        
+        // Initial update
+        updateStatus();
     });
 </script>
 {% endblock %}

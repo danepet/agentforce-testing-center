@@ -108,19 +108,45 @@
             select.empty();
             select.append('<option value="">Select a validation type</option>');
             
+            // Create option groups
+            const standardGroup = $('<optgroup label="Standard Validations"></optgroup>');
+            const advancedGroup = $('<optgroup label="Advanced AI Validations (No parameters needed)"></optgroup>');
+            
             for (const [type, info] of Object.entries(data)) {
-                select.append(`<option value="${type}">${type} - ${info.description}</option>`);
+                const option = $(`<option value="${type}">${type} - ${info.description}</option>`);
+                
+                // Add options to appropriate group
+                if (['contextual_relevancy', 'answer_relevancy', 'faithfulness'].includes(type)) {
+                    advancedGroup.append(option);
+                } else {
+                    standardGroup.append(option);
+                }
             }
+            
+            // Add groups to select
+            select.append(standardGroup);
+            select.append(advancedGroup);
             
             // Update parameters when type changes
             select.change(function() {
                 const type = $(this).val();
                 if (type && validationTemplates[type]) {
                     $('#validationDescription').text(validationTemplates[type].description);
-                    $('#validationParameters').val(JSON.stringify(validationTemplates[type].parameters, null, 2));
+                    
+                    // Handle special validation types
+                    if (['contextual_relevancy', 'answer_relevancy', 'faithfulness'].includes(type)) {
+                        // Disable parameters textarea and show a message
+                        $('#validationParameters').val('{}').prop('disabled', true);
+                        $('#parametersHelpText').html('<strong>Note:</strong> Parameters for this validation type will be added automatically during test execution.');
+                    } else {
+                        // Enable textarea and show default parameters
+                        $('#validationParameters').val(JSON.stringify(validationTemplates[type].parameters, null, 2)).prop('disabled', false);
+                        $('#parametersHelpText').text('Parameters should be provided as a valid JSON object.');
+                    }
                 } else {
                     $('#validationDescription').text('');
-                    $('#validationParameters').val('');
+                    $('#validationParameters').val('').prop('disabled', false);
+                    $('#parametersHelpText').text('Parameters should be provided as a valid JSON object.');
                 }
             });
         });
@@ -250,22 +276,47 @@
         if (currentTurnIndex === null) return;
         
         const validationType = $('#validationType').val();
-        const validationParameters = $('#validationParameters').val();
         
-        if (!validationType || !validationParameters) {
-            alert('Please select a validation type and provide parameters.');
+        if (!validationType) {
+            alert('Please select a validation type.');
             return;
         }
         
+        // For certain validation types, we can use empty or default parameters
+        let validationParameters = '{}';
+        let skipJsonValidation = false;
+        
+        // Special handling for validation types that don't need manual parameters
+        if (['contextual_relevancy', 'answer_relevancy', 'faithfulness'].includes(validationType)) {
+            // Use empty parameters - they'll be filled dynamically during test execution
+            skipJsonValidation = true;
+        } else {
+            // For other validation types, get parameters from the textarea
+            validationParameters = $('#validationParameters').val();
+            
+            if (!validationParameters) {
+                alert('Please provide parameters for this validation type.');
+                return;
+            }
+        }
+        
         try {
-            // Validate JSON
-            JSON.parse(validationParameters);
+            // Validate JSON (skip for special types)
+            if (!skipJsonValidation) {
+                JSON.parse(validationParameters);
+            }
             
             const validationCount = parseInt($(`#turn_${currentTurnIndex}_validation_count`).val()) || 0;
             const newValidationIndex = validationCount;
             
             // Get validation description
             const validationDesc = validationTemplates[validationType].description;
+            
+            // For special types, add a note about dynamic parameters
+            let noteText = '';
+            if (skipJsonValidation) {
+                noteText = ' (Parameters will be added automatically during test execution)';
+            }
             
             const validationHtml = `
                 <div class="alert alert-light border" id="turn_${currentTurnIndex}_validation_${newValidationIndex}_container">
@@ -275,7 +326,7 @@
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
-                    <div class="small text-muted">${validationDesc}</div>
+                    <div class="small text-muted">${validationDesc}${noteText}</div>
                     <input type="hidden" id="turn_${currentTurnIndex}_validation_${newValidationIndex}_type" name="turn_${currentTurnIndex}_validation_${newValidationIndex}_type" value="${validationType}">
                     <input type="hidden" id="turn_${currentTurnIndex}_validation_${newValidationIndex}_parameters" name="turn_${currentTurnIndex}_validation_${newValidationIndex}_parameters" value='${validationParameters}'>
                 </div>

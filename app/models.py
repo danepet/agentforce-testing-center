@@ -1,6 +1,10 @@
 import json
 from datetime import datetime
 from app import db
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 test_case_tags = db.Table('test_case_tags',
     db.Column('test_case_id', db.Integer, db.ForeignKey('test_cases.id'), primary_key=True),
@@ -184,7 +188,14 @@ class ExpectedValidation(db.Model):
     
     def get_parameters(self):
         """Convert JSON-encoded parameters to dictionary."""
-        return json.loads(self.validation_parameters)
+        try:
+            return json.loads(self.validation_parameters)
+        except json.JSONDecodeError:
+            logger.error(f"Failed to parse validation parameters as JSON: {self.validation_parameters}")
+            return {"raw_input": self.validation_parameters}  # Return a dictionary with the raw string
+        except Exception as e:
+            logger.error(f"Unexpected error parsing validation parameters: {str(e)}")
+            return {}  # Return an empty dictionary as fallback
     
     def to_dict(self):
         return {

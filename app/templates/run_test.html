@@ -76,6 +76,19 @@
                     </div>
                 </div>
             </div>
+            <h5 class="mb-3">Performance Options</h5>
+            <div class="row g-3 mb-4">
+                <div class="col-md-12">
+                    <label for="runner_mode" class="form-label">Test Runner Mode</label>
+                    <select class="form-select" id="runner_mode" name="runner_mode">
+                        <option value="async" selected>Asynchronous (Faster, runs validations in parallel)</option>
+                        <option value="sync">Synchronous (Original, runs sequentially)</option>
+                    </select>
+                    <div class="form-text">
+                        <strong>Asynchronous mode:</strong> Runs validations in parallel and allows the test to continue to the next turn while validations are still running. This can significantly improve performance, especially with multiple validations per turn.
+                    </div>
+                </div>
+            </div>
             
             <div class="alert alert-info">
                 <i class="fas fa-info-circle me-2"></i>
