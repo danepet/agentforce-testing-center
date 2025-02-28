@@ -11,3 +11,4 @@ migrations/
 *.sqlite3
 coverage/
 *.egg-info/
+venv/
