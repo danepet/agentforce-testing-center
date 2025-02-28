@@ -1,13 +1,17 @@
 import json
 import csv
 import io
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, Response
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, Response, session
 from app import db
 from app.models import TestCase, ConversationTurn, ExpectedValidation, TestRun, TurnResult, ValidationResult, Tag, Category, TestMetrics
 from app.test_runner import TestRunner, ParallelTestRunner, AsyncTestRunner
-from app.agent_connector import AgentConnector, AgentConfig
+from app.agent_connector import AgentConnector, AgentConfig, extract_response_text
 from datetime import datetime
 from app.test_runner import TestRunner, ParallelTestRunner
+
+from app.tasks import run_test_task, run_multiple_tests_task
+from celery.result import AsyncResult
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -270,7 +274,7 @@ def delete_test(test_id):
 
 @main_bp.route('/tests/<int:test_id>/run', methods=['GET', 'POST'])
 def run_test(test_id):
-    """Run a test case."""
+    """Run a test case using Celery for background processing."""
     test_case = TestCase.query.get_or_404(test_id)
     
     if request.method == 'POST':
@@ -281,36 +285,19 @@ def run_test(test_id):
             # Get HTML selector if provided
             html_selector = request.form.get('html_selector')
             
-            # Get test runner mode
-            runner_mode = request.form.get('runner_mode', 'async')  # Default to async
+            # Start Celery task
+            task = run_test_task.delay(test_id, credentials, html_selector)
             
-            # Create the appropriate test runner
-            from flask import current_app
-            if runner_mode == 'async':
-                # Use the new asynchronous test runner
-                test_runner = AsyncTestRunner(current_app.config)
-            else:
-                # Use the original synchronous test runner
-                test_runner = TestRunner(current_app.config)
+            # Store task ID in session for status checking
+            session['test_task_id'] = task.id
+            session['test_case_id'] = test_id
             
-            # Update credentials
-            agent_config = AgentConfig(
-                sf_org_domain=credentials['org_domain'],
-                client_id=credentials['client_id'],
-                client_secret=credentials['client_secret'],
-                agent_id=credentials['agent_id']
-            )
-            test_runner.agent_connector = AgentConnector(config=agent_config)
-            
-            # Run test with HTML selector if provided
-            test_run_id = test_runner.run_test(test_id, html_selector)
-            
-            flash('Test case executed successfully', 'success')
-            return redirect(url_for('main.view_test_results', test_run_id=test_run_id))
+            flash('Test case execution started', 'success')
+            return redirect(url_for('main.test_status', task_id=task.id))
         
         except Exception as e:
-            logger.error(f"Error running test case: {str(e)}")
-            flash(f'Error running test case: {str(e)}', 'error')
+            logger.error(f"Error starting test case: {str(e)}")
+            flash(f'Error starting test case: {str(e)}', 'error')
     
     return render_template('run_test.html', test_case=test_case)
 
@@ -810,7 +797,7 @@ def update_test_category(test_id):
 
 @main_bp.route('/tests/run-multiple', methods=['GET', 'POST'])
 def run_multiple_tests():
-    """Run multiple test cases in parallel."""
+    """Run multiple test cases in parallel using Celery."""
     if request.method == 'POST':
         try:
             # Get selected test cases
@@ -833,31 +820,14 @@ def run_multiple_tests():
             # Get HTML selector
             html_selector = request.form.get('html_selector', '')
             
-            # Create parallel test runner
-            from flask import current_app
-            parallel_runner = ParallelTestRunner(current_app.config)
+            # Create task for running multiple tests
+            task = run_multiple_tests_task.delay(test_ids, credentials, html_selector)
             
-            # Generate a batch ID for this run
-            import uuid
-            batch_id = str(uuid.uuid4())
-            
-            # Store the parallel runner in app context for status checks
-            if not hasattr(current_app, 'parallel_runners'):
-                current_app.parallel_runners = {}
-            
-            current_app.parallel_runners[batch_id] = parallel_runner
-            
-            # Start test execution in a background thread to avoid blocking
-            import threading
-            thread = threading.Thread(
-                target=parallel_runner.run_multiple_tests,
-                args=(test_ids, html_selector, credentials)
-            )
-            thread.daemon = True
-            thread.start()
+            # Store task ID in session
+            session['batch_task_id'] = task.id
             
             flash(f'Started execution of {len(test_ids)} test cases', 'success')
-            return redirect(url_for('main.batch_status', batch_id=batch_id))
+            return redirect(url_for('main.batch_status', batch_id=task.id))
             
         except Exception as e:
             logger.error(f"Error starting parallel test execution: {str(e)}")
@@ -870,16 +840,72 @@ def run_multiple_tests():
 
 @main_bp.route('/tests/batch/<batch_id>')
 def batch_status(batch_id):
-    """Show status of a batch of tests."""
-    from flask import current_app
+    """Show status of a batch of tests using Celery task status."""
+    task = AsyncResult(batch_id)
     
-    if not hasattr(current_app, 'parallel_runners') or batch_id not in current_app.parallel_runners:
-        flash('Batch not found or expired', 'warning')
-        return redirect(url_for('main.test_runs'))
+    if task.state == 'PENDING':
+        # Task not started yet
+        status = {
+            'state': task.state,
+            'tests': {},
+            'completed': 0,
+            'failed': 0,
+            'total': 0,
+            'percent': 0
+        }
+    elif task.state == 'FAILURE':
+        # Task failed
+        status = {
+            'state': task.state,
+            'error': str(task.info.get('error', '')) if task.info else 'Unknown error',
+            'tests': {},
+            'completed': 0,
+            'failed': 0,
+            'total': 0,
+            'percent': 0
+        }
+    elif task.state == 'PROGRESS' or task.state == 'SUCCESS':
+        # Task in progress or completed
+        if task.info:
+            status = {
+                'state': task.state,
+                'completed': task.info.get('completed', 0),
+                'failed': task.info.get('failed', 0),
+                'total': task.info.get('total', 0),
+                'current_test_id': task.info.get('current_test_id'),
+                'current_test_name': task.info.get('current_test_name'),
+                'percent': task.info.get('percent', 0),
+                'tests': {}
+            }
+            
+            # Include individual test results if available
+            if 'results' in task.info:
+                status['tests'] = task.info['results']
+        else:
+            status = {
+                'state': task.state,
+                'tests': {},
+                'completed': 0,
+                'failed': 0,
+                'total': 0,
+                'percent': 0
+            }
+    else:
+        # Unknown state
+        status = {
+            'state': task.state,
+            'tests': {},
+            'completed': 0,
+            'failed': 0,
+            'total': 0,
+            'percent': 0
+        }
     
-    parallel_runner = current_app.parallel_runners[batch_id]
-    status = parallel_runner.get_status()
+    # For AJAX requests
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify(status)
     
+    # For regular browser requests
     return render_template('batch_status.html', batch_id=batch_id, status=status)
 
 @main_bp.route('/api/tests/batch/<batch_id>/status')
@@ -913,3 +939,62 @@ def batch_status_api(batch_id):
             'error': 'Failed to retrieve batch status',
             'details': str(e)
         }), 500
+    
+@main_bp.route('/tests/status/<task_id>')
+def test_status(task_id):
+    """Check the status of a running test."""
+    task = AsyncResult(task_id)
+    
+    if task.state == 'PENDING':
+        # Task not started yet
+        response = {
+            'state': task.state,
+            'status': 'Pending...'
+        }
+    elif task.state == 'FAILURE':
+        # Task failed
+        response = {
+            'state': task.state,
+            'status': 'Error',
+            'error': str(task.info.get('error', '')) if task.info else 'Unknown error'
+        }
+    elif task.state == 'PROGRESS':
+        # Task in progress
+        if task.info:
+            response = {
+                'state': task.state,
+                'current_turn': task.info.get('current_turn', 0),
+                'total_turns': task.info.get('total_turns', 1),
+                'test_run_id': task.info.get('test_run_id'),
+                'percent': task.info.get('percent', 0)
+            }
+        else:
+            response = {
+                'state': task.state,
+                'status': 'In progress...',
+                'percent': 0
+            }
+    else:
+        # Task completed
+        if task.info:
+            response = {
+                'state': task.state,
+                'status': task.info.get('status', ''),
+                'test_run_id': task.info.get('test_run_id'),
+                'pass_percentage': task.info.get('pass_percentage', 0)
+            }
+        else:
+            response = {
+                'state': task.state,
+                'status': 'Unknown'
+            }
+    
+    # For AJAX requests
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify(response)
+    
+    # For normal browser requests
+    if task.state == 'SUCCESS' and task.info and 'test_run_id' in task.info:
+        return redirect(url_for('main.view_test_results', test_run_id=task.info['test_run_id']))
+    else:
+        return render_template('test_status.html', task_id=task_id, status=response)

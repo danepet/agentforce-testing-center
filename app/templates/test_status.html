@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Test Status - AI Agent Testing Center{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h2 class="mb-0">
+            <i class="fas fa-spinner fa-spin text-primary me-2"></i>
+            Test Execution Status
+        </h2>
+        <div>
+            <span class="badge 
+                {% if status.state == 'SUCCESS' %}bg-success
+                {% elif status.state == 'FAILURE' %}bg-danger
+                {% elif status.state == 'PROGRESS' %}bg-primary
+                {% else %}bg-secondary{% endif %}" 
+                id="taskStatus">
+                {{ status.state }}
+            </span>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="progress mb-4" style="height: 25px;">
+            {% if status.percent is defined %}
+            <div id="progressBar" class="progress-bar bg-primary progress-bar-striped progress-bar-animated" 
+                role="progressbar" style="width: {{ status.percent }}%">
+                {{ status.percent }}%
+            </div>
+            {% else %}
+            <div id="progressBar" class="progress-bar bg-primary progress-bar-striped progress-bar-animated" 
+                role="progressbar" style="width: 0%">
+                0%
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="text-center mb-4">
+            <h4 id="statusMessage">
+                {% if status.state == 'PROGRESS' %}
+                Processing turn {{ status.current_turn }} of {{ status.total_turns }}
+                {% elif status.state == 'SUCCESS' %}
+                Test completed successfully!
+                {% elif status.state == 'FAILURE' %}
+                Test failed: {{ status.error }}
+                {% else %}
+                Starting test...
+                {% endif %}
+            </h4>
+        </div>
+        
+        <div class="d-flex justify-content-center" id="spinnerContainer">
+            {% if status.state not in ['SUCCESS', 'FAILURE'] %}
+            <div class="spinner-border text-primary" role="status" id="statusSpinner">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            {% else %}
+            <div class="alert 
+                {% if status.state == 'SUCCESS' %}alert-success
+                {% elif status.state == 'FAILURE' %}alert-danger
+                {% else %}alert-info{% endif %}" 
+                role="alert">
+                {% if status.state == 'SUCCESS' %}
+                Test completed successfully. You will be redirected to results shortly.
+                {% elif status.state == 'FAILURE' %}
+                Test execution failed. Please check the error and try again.
+                {% else %}
+                Waiting for test execution to begin...
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        
+        {% if status.state == 'FAILURE' and status.error %}
+        <div class="alert alert-danger mt-4">
+            <strong>Error:</strong> {{ status.error }}
+        </div>
+        {% endif %}
+        
+        <div class="mt-4 text-center">
+            {% if status.state == 'SUCCESS' and status.test_run_id %}
+            <a href="{{ url_for('main.view_test_results', test_run_id=status.test_run_id) }}" class="btn btn-primary">
+                <i class="fas fa-chart-bar me-1"></i> View Test Results
+            </a>
+            {% endif %}
+            <a href="{{ url_for('main.test_list') }}" class="btn btn-secondary">
+                <i class="fas fa-list me-1"></i> Back to Test List
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const taskId = '{{ task_id }}';
+        
+        // Don't poll if already completed
+        {% if status.state in ['SUCCESS', 'FAILURE'] %}
+            {% if status.state == 'SUCCESS' and status.test_run_id %}
+                // Redirect to results page after a short delay
+                setTimeout(function() {
+                    window.location.href = "{{ url_for('main.view_test_results', test_run_id=status.test_run_id) }}";
+                }, 2000);
+            {% endif %}
+            
+            return;
+        {% endif %}
+        
+        // Poll for updates every 2 seconds
+        const statusInterval = setInterval(updateStatus, 2000);
+        
+        function updateStatus() {
+            fetch(`/tests/status/${taskId}`, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Update status badge
+                const statusBadge = document.getElementById('taskStatus');
+                statusBadge.textContent = data.state;
+                
+                // Update status badge class
+                if (data.state === 'SUCCESS') {
+                    statusBadge.className = 'badge bg-success';
+                } else if (data.state === 'FAILURE') {
+                    statusBadge.className = 'badge bg-danger';
+                } else if (data.state === 'PROGRESS') {
+                    statusBadge.className = 'badge bg-primary';
+                } else {
+                    statusBadge.className = 'badge bg-secondary';
+                }
+                
+                // Update progress bar
+                const progressBar = document.getElementById('progressBar');
+                if (data.percent !== undefined) {
+                    progressBar.style.width = `${data.percent}%`;
+                    progressBar.textContent = `${data.percent}%`;
+                }
+                
+                // Update status message
+                const statusMessage = document.getElementById('statusMessage');
+                if (data.state === 'PROGRESS') {
+                    statusMessage.textContent = `Processing turn ${data.current_turn} of ${data.total_turns}`;
+                } else if (data.state === 'SUCCESS') {
+                    statusMessage.textContent = 'Test completed successfully!';
+                    clearInterval(statusInterval);
+                    
+                    // Replace spinner with success message
+                    const spinnerContainer = document.getElementById('spinnerContainer');
+                    spinnerContainer.innerHTML = `
+                        <div class="alert alert-success" role="alert">
+                            Test completed successfully. You will be redirected to results shortly.
+                        </div>
+                    `;
+                    
+                    // Redirect to results page
+                    if (data.test_run_id) {
+                        setTimeout(function() {
+                            window.location.href = `/runs/${data.test_run_id}`;
+                        }, 1000);
+                    }
+                } else if (data.state === 'FAILURE') {
+                    statusMessage.textContent = `Test failed: ${data.error || 'Unknown error'}`;
+                    clearInterval(statusInterval);
+                    
+                    // Replace spinner with error message
+                    const spinnerContainer = document.getElementById('spinnerContainer');
+                    spinnerContainer.innerHTML = `
+                        <div class="alert alert-danger" role="alert">
+                            Test execution failed. Please check the error and try again.
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error('Error checking test status:', error);
+            });
+        }
+        
+        // Initial update
+        updateStatus();
+    });
+</script>
+{% endblock %}

@@ -24,6 +24,11 @@ deepeval==0.9.1
 python-dateutil==2.8.2
 pytz==2023.3
 
+# Asynchronous task processing
+celery>=5.2.7
+redis>=4.3.4
+kombu>=5.2.4
+
 # Production deployment
 gunicorn==21.2.0
 psycopg2-binary==2.9.6  # For PostgreSQL on Heroku

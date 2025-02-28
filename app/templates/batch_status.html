@@ -10,7 +10,14 @@
             Batch Test Status
         </h2>
         <div>
-            <span class="badge bg-primary" id="batchStatus">Running</span>
+            <span class="badge 
+                {% if status.state == 'SUCCESS' %}bg-success
+                {% elif status.state == 'FAILURE' %}bg-danger
+                {% elif status.state == 'PROGRESS' %}bg-primary
+                {% else %}bg-secondary{% endif %}"
+                id="batchStatus">
+                {{ status.state }}
+            </span>
         </div>
     </div>
     <div class="card-body">
@@ -24,7 +31,7 @@
                                     Total Tests
                                 </div>
                                 <div class="h5 mb-0 font-weight-bold text-gray-800" id="testsTotal">
-                                    {{ status|length }}
+                                    {{ status.total }}
                                 </div>
                             </div>
                             <div class="col-auto">
@@ -44,7 +51,7 @@
                                     Completed
                                 </div>
                                 <div class="h5 mb-0 font-weight-bold text-gray-800" id="testsCompleted">
-                                    {{ status.values()|selectattr('status', 'equalto', 'completed')|list|length }}
+                                    {{ status.completed }}
                                 </div>
                             </div>
                             <div class="col-auto">
@@ -64,7 +71,7 @@
                                     In Progress
                                 </div>
                                 <div class="h5 mb-0 font-weight-bold text-gray-800" id="testsRunning">
-                                    {{ status.values()|selectattr('status', 'equalto', 'running')|list|length }}
+                                    {% if status.current_test_id %}1{% else %}0{% endif %}
                                 </div>
                             </div>
                             <div class="col-auto">
@@ -84,7 +91,7 @@
                                     Failed
                                 </div>
                                 <div class="h5 mb-0 font-weight-bold text-gray-800" id="testsFailed">
-                                    {{ status.values()|selectattr('status', 'equalto', 'failed')|list|length }}
+                                    {{ status.failed }}
                                 </div>
                             </div>
                             <div class="col-auto">
@@ -99,46 +106,46 @@
         <div class="mb-4">
             <h5>Overall Progress</h5>
             <div class="progress" style="height: 25px;">
-                {% set completed_pct = (status.values()|selectattr('status', 'equalto', 'completed')|list|length / status|length * 100)|int if status|length > 0 else 0 %}
-                {% set running_pct = (status.values()|selectattr('status', 'equalto', 'running')|list|length / status|length * 100)|int if status|length > 0 else 0 %}
-                {% set failed_pct = (status.values()|selectattr('status', 'equalto', 'failed')|list|length / status|length * 100)|int if status|length > 0 else 0 %}
-                {% set queued_pct = (status.values()|selectattr('status', 'equalto', 'queued')|list|length / status|length * 100)|int if status|length > 0 else 0 %}
-                
-                <div class="progress-bar bg-success" role="progressbar" style="width: {{ completed_pct }}%" id="completedProgressBar">
-                    {{ completed_pct }}% Completed
+                {% if status.percent is defined %}
+                <div class="progress-bar bg-success" role="progressbar" 
+                     style="width: {{ status.percent }}%" id="progressBar">
+                    {{ status.percent }}% Complete
                 </div>
-                <div class="progress-bar bg-warning" role="progressbar" style="width: {{ running_pct }}%" id="runningProgressBar">
-                    {{ running_pct }}% Running
+                {% else %}
+                <div class="progress-bar bg-success" role="progressbar" 
+                     style="width: 0%" id="progressBar">
+                    0% Complete
                 </div>
-                <div class="progress-bar bg-danger" role="progressbar" style="width: {{ failed_pct }}%" id="failedProgressBar">
-                    {{ failed_pct }}% Failed
-                </div>
-                <div class="progress-bar bg-secondary" role="progressbar" style="width: {{ queued_pct }}%" id="queuedProgressBar">
-                    {{ queued_pct }}% Queued
-                </div>
+                {% endif %}
             </div>
         </div>
+        
+        {% if status.current_test_name %}
+        <div class="alert alert-info mb-4">
+            <i class="fas fa-spinner fa-spin me-2"></i> Currently testing: <strong>{{ status.current_test_name }}</strong>
+        </div>
+        {% endif %}
         
         <h5>Test Details</h5>
         <div class="table-responsive">
             <table class="table table-bordered" id="testsTable">
                 <thead>
                     <tr>
-                        <th>Test Case</th>
+                        <th>Test ID</th>
                         <th>Status</th>
                         <th>Test Run ID</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for test_id, test_info in status.items() %}
+                    {% for test_id, test_info in status.tests.items() %}
                     <tr id="test-row-{{ test_id }}" class="
                         {% if test_info.status == 'completed' %}table-success
                         {% elif test_info.status == 'failed' %}table-danger
                         {% elif test_info.status == 'running' %}table-warning
                         {% else %}table-light{% endif %}
                     ">
-                        <td>{{ test_info.test_case_name }}</td>
+                        <td>{{ test_id }}</td>
                         <td>
                             <span class="badge 
                                 {% if test_info.status == 'completed' %}bg-success
@@ -187,110 +194,114 @@
 {% block scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const batchId = document.querySelector('[data-batch-id]')?.getAttribute('data-batch-id');
+        const batchId = '{{ batch_id }}';
         
-        if (!batchId) {
-            console.error('Batch ID not found');
+        // Don't poll if already completed
+        {% if status.state in ['SUCCESS', 'FAILURE'] %}
             return;
-        }
+        {% endif %}
         
         // Poll status every 3 seconds
         const statusInterval = setInterval(updateStatus, 3000);
         
         // Update status function
         function updateStatus() {
-            fetch(`/api/tests/batch/${batchId}/status`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (!data || !data.status) {
-                        console.error('Invalid response data', data);
-                        return;
-                    }
-                    
-                    // Update status counters
-                    document.getElementById('testsTotal').textContent = data.tests_total;
-                    document.getElementById('testsCompleted').textContent = data.tests_completed;
-                    document.getElementById('testsRunning').textContent = data.tests_running;
-                    document.getElementById('testsFailed').textContent = data.tests_failed;
-                    
-                    // Update progress bars
-                    const completedPct = (data.tests_completed / data.tests_total * 100) || 0;
-                    const runningPct = (data.tests_running / data.tests_total * 100) || 0;
-                    const failedPct = (data.tests_failed / data.tests_total * 100) || 0;
-                    const queuedPct = (data.tests_queued / data.tests_total * 100) || 0;
-                    
-                    document.getElementById('completedProgressBar').style.width = `${completedPct}%`;
-                    document.getElementById('completedProgressBar').textContent = `${Math.round(completedPct)}% Completed`;
-                    
-                    document.getElementById('runningProgressBar').style.width = `${runningPct}%`;
-                    document.getElementById('runningProgressBar').textContent = `${Math.round(runningPct)}% Running`;
-                    
-                    document.getElementById('failedProgressBar').style.width = `${failedPct}%`;
-                    document.getElementById('failedProgressBar').textContent = `${Math.round(failedPct)}% Failed`;
-                    
-                    document.getElementById('queuedProgressBar').style.width = `${queuedPct}%`;
-                    document.getElementById('queuedProgressBar').textContent = `${Math.round(queuedPct)}% Queued`;
-                    
-                    // Update overall status
-                    const batchStatus = document.getElementById('batchStatus');
-                    if (data.completed) {
-                        batchStatus.textContent = 'Completed';
-                        batchStatus.className = 'badge bg-success';
-                        
-                        // Stop polling if all tests are completed
-                        clearInterval(statusInterval);
+            fetch(`/tests/batch/${batchId}`, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Update status counters
+                document.getElementById('testsTotal').textContent = data.total;
+                document.getElementById('testsCompleted').textContent = data.completed;
+                document.getElementById('testsFailed').textContent = data.failed;
+                document.getElementById('testsRunning').textContent = data.current_test_id ? '1' : '0';
+                
+                // Update progress bar
+                const progressBar = document.getElementById('progressBar');
+                if (data.percent !== undefined) {
+                    progressBar.style.width = `${data.percent}%`;
+                    progressBar.textContent = `${data.percent}% Complete`;
+                }
+                
+                // Update overall status
+                const batchStatus = document.getElementById('batchStatus');
+                batchStatus.textContent = data.state;
+                
+                if (data.state === 'SUCCESS') {
+                    batchStatus.className = 'badge bg-success';
+                    clearInterval(statusInterval);
+                } else if (data.state === 'FAILURE') {
+                    batchStatus.className = 'badge bg-danger';
+                    clearInterval(statusInterval);
+                } else {
+                    batchStatus.className = 'badge bg-primary';
+                }
+                
+                // Update current test info
+                const currentTestAlert = document.querySelector('.alert-info');
+                if (data.current_test_name) {
+                    if (currentTestAlert) {
+                        currentTestAlert.innerHTML = `<i class="fas fa-spinner fa-spin me-2"></i> Currently testing: <strong>${data.current_test_name}</strong>`;
                     } else {
-                        batchStatus.textContent = 'Running';
-                        batchStatus.className = 'badge bg-primary';
+                        const newAlert = document.createElement('div');
+                        newAlert.className = 'alert alert-info mb-4';
+                        newAlert.innerHTML = `<i class="fas fa-spinner fa-spin me-2"></i> Currently testing: <strong>${data.current_test_name}</strong>`;
+                        document.querySelector('.progress').parentNode.after(newAlert);
+                    }
+                } else if (currentTestAlert) {
+                    currentTestAlert.remove();
+                }
+                
+                // Update individual test rows
+                if (data.tests) {
+                    const tableBody = document.querySelector('#testsTable tbody');
+                    let rowsHTML = '';
+                    
+                    for (const [testId, testInfo] of Object.entries(data.tests)) {
+                        const rowClass = testInfo.status === 'completed' ? 'table-success' :
+                                        testInfo.status === 'failed' ? 'table-danger' :
+                                        testInfo.status === 'running' ? 'table-warning' : 'table-light';
+                        
+                        const badgeClass = testInfo.status === 'completed' ? 'bg-success' :
+                                          testInfo.status === 'failed' ? 'bg-danger' :
+                                          testInfo.status === 'running' ? 'bg-warning' : 'bg-secondary';
+                        
+                        const actionCell = testInfo.test_run_id ? 
+                            `<a href="/runs/${testInfo.test_run_id}" class="btn btn-sm btn-primary">
+                                <i class="fas fa-eye"></i> View Results
+                            </a>` :
+                            testInfo.status === 'failed' ?
+                            `<button class="btn btn-sm btn-secondary" disabled>
+                                <i class="fas fa-times"></i> Failed
+                            </button>` :
+                            `<span class="spinner-border spinner-border-sm" role="status"></span>
+                            <span>Processing...</span>`;
+                        
+                        rowsHTML += `
+                            <tr id="test-row-${testId}" class="${rowClass}">
+                                <td>${testId}</td>
+                                <td>
+                                    <span class="badge ${badgeClass}">
+                                        ${testInfo.status.charAt(0).toUpperCase() + testInfo.status.slice(1)}
+                                    </span>
+                                </td>
+                                <td id="test-run-id-${testId}">
+                                    ${testInfo.test_run_id || '-'}
+                                </td>
+                                <td>${actionCell}</td>
+                            </tr>
+                        `;
                     }
                     
-                    // Update individual test rows
-                    for (const [testId, testInfo] of Object.entries(data.status)) {
-                        const row = document.getElementById(`test-row-${testId}`);
-                        if (!row) continue;
-                        
-                        // Update row class
-                        if (testInfo.status === 'completed') {
-                            row.className = 'table-success';
-                        } else if (testInfo.status === 'failed') {
-                            row.className = 'table-danger';
-                        } else if (testInfo.status === 'running') {
-                            row.className = 'table-warning';
-                        } else {
-                            row.className = 'table-light';
-                        }
-                        
-                        // Update test run ID
-                        const testRunIdCell = document.getElementById(`test-run-id-${testId}`);
-                        if (testRunIdCell && testInfo.test_run_id) {
-                            testRunIdCell.textContent = testInfo.test_run_id;
-                        }
-                        
-                        // Update actions column
-                        const actionsCell = row.cells[3];
-                        if (testInfo.test_run_id) {
-                            actionsCell.innerHTML = `
-                                <a href="/runs/${testInfo.test_run_id}" class="btn btn-sm btn-primary">
-                                    <i class="fas fa-eye"></i> View Results
-                                </a>
-                            `;
-                        } else if (testInfo.status === 'failed') {
-                            actionsCell.innerHTML = `
-                                <button class="btn btn-sm btn-secondary" disabled>
-                                    <i class="fas fa-times"></i> Failed
-                                </button>
-                            `;
-                        }
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching batch status:', error);
-                });
+                    tableBody.innerHTML = rowsHTML;
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching batch status:', error);
+            });
         }
         
         // Initial update

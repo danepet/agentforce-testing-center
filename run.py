@@ -1,4 +1,3 @@
-# In run.py or wherever you define your Flask app
 import os
 from app import create_app
 from config import config
