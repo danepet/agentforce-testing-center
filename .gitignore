@@ -1,0 +1,51 @@
+# Node.js Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build output
+dist/
+build/
+out/
+
+# Environment variables
+.env
+.env.*.local
+.env.local
+
+# Logs
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Test reports
+coverage/
+.nyc_output/
+
+# Database files
+*.sqlite
+*.db
+database.sqlite
+*.sql
+*.dump
+
+# OS generated files
+.DS_Store
+Thumbs.db

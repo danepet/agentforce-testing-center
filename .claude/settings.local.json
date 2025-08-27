@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:developer.salesforce.com)",
+      "WebSearch",
+      "Bash(npm install)",
+      "Bash(npm run init-db:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)",
+      "WebFetch(domain:www.postman.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:salesforce-async-messaging.github.io)",
+      "Bash(rm:*)",
+      "Bash(sqlite3:*)",
+      "Bash(npm start)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)",
+      "Bash(find:*)",
+      "Bash(open http://localhost:3000)",
+      "Bash(timeout:*)",
+      "WebFetch(domain:neuraflash.com)",
+      "Bash(npm install:*)",
+      "Bash(grep:*)",
+      "Bash(sed:*)",
+      "Bash(pkill:*)",
+      "Bash(touch:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

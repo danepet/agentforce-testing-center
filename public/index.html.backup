@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentforce Testing Center</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-brand">
+                <div class="neuraflash-logo">
+                    <div class="eclipse-logo"></div>
+                    <span class="brand-name">NeuraFlash</span>
+                </div>
+                <div class="header-content">
+                    <h1>Agentforce Testing Center</h1>
+                    <p>AI-Powered Goal-Based Testing for Salesforce Agentforce</p>
+                </div>
+            </div>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-button active" onclick="showTab('projects')">Projects</button>
+            <button class="tab-button" onclick="showTab('connections')">Connections</button>
+            <button class="tab-button" onclick="showTab('admin')">Admin</button>
+        </nav>
+
+        <!-- Projects Tab -->
+        <div id="projects-tab" class="tab-content active">
+            <div class="section-header">
+                <h2>Projects</h2>
+                <button class="btn btn-primary" onclick="showProjectForm()">Create New Project</button>
+            </div>
+
+            <div id="project-form" class="form-container" style="display: none;">
+                <h3>Create New Project</h3>
+                <form id="projectForm">
+                    <div class="form-group">
+                        <label for="projectName">Project Name: <span class="required">*</span></label>
+                        <input type="text" id="projectName" name="projectName" required placeholder="Enter project name">
+                    </div>
+                    <div class="form-group">
+                        <label for="projectDescription">Description:</label>
+                        <textarea id="projectDescription" name="projectDescription" rows="3" placeholder="Describe the purpose of this project"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="projectTags">Tags (comma-separated):</label>
+                        <input type="text" id="projectTags" name="projectTags" placeholder="api, mobile, regression">
+                    </div>
+                    
+                    <div class="form-section">
+                        <h4>MIAW Connection Settings</h4>
+                        <p class="form-section-description">Configure Salesforce Messaging for In-App and Web settings for this project</p>
+                        
+                        <div class="form-group">
+                            <label for="miawOrgId">Salesforce Org ID:</label>
+                            <input type="text" id="miawOrgId" name="miawOrgId" placeholder="e.g., 00DHu00000ZW0OL">
+                            <small>15-character Salesforce Organization ID</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="miawDeploymentName">Deployment Name:</label>
+                            <input type="text" id="miawDeploymentName" name="miawDeploymentName" placeholder="e.g., AgentforceAPI">
+                            <small>Name of your Agentforce deployment</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="miawBaseUrl">Base URL:</label>
+                            <input type="url" id="miawBaseUrl" name="miawBaseUrl" placeholder="e.g., https://example.my.salesforce-scrt.com">
+                            <small>Salesforce instance base URL</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Routing Attributes:</label>
+                            <small>Pre-chat form data passed to the conversation (optional)</small>
+                            <div id="routingAttributesContainer">
+                                <div class="routing-attribute-row">
+                                    <input type="text" placeholder="Field name (e.g., _firstName)" class="routing-key">
+                                    <input type="text" placeholder="Value (e.g., john)" class="routing-value">
+                                    <button type="button" class="btn btn-small btn-danger" onclick="removeRoutingAttribute(this)">Remove</button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-small btn-secondary" onclick="addRoutingAttribute()">+ Add Routing Attribute</button>
+                            <input type="hidden" id="miawRoutingAttributes" name="miawRoutingAttributes">
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-success">✅ Create Project</button>
+                        <button type="button" class="btn btn-secondary" onclick="hideProjectForm()">❌ Cancel</button>
+                    </div>
+                </form>
+            </div>
+
+            <div id="projects-list" class="projects-grid">
+                <!-- Projects will be loaded here -->
+            </div>
+        </div>
+
+        <!-- Project Details Page -->
+        <div id="project-page" class="tab-content">
+            <!-- Project Header Section -->
+            <header class="project-header">
+                <div class="project-navigation">
+                    <button class="btn btn-link" onclick="backToProjects()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="m12 19-7-7 7-7"/>
+                            <path d="M19 12H5"/>
+                        </svg>
+                        Back to Projects
+                    </button>
+                </div>
+                
+                <div class="project-title-section">
+                    <h1 id="project-page-title" class="project-title">Project Details</h1>
+                    <div id="project-metadata" class="project-metadata">
+                        <!-- Project metadata will be loaded here -->
+                    </div>
+                </div>
+                
+                <div class="project-actions">
+                    <button class="btn btn-secondary" onclick="testProjectMiawConnection()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                        </svg>
+                        Test MIAW Connection
+                    </button>
+                    <button class="btn btn-secondary" onclick="editCurrentProject()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                        Edit Project
+                    </button>
+                </div>
+            </header>
+
+            <!-- Project Content -->
+            <main class="project-content">
+                <!-- Project Subtabs Navigation -->
+                <div class="project-subtabs">
+                    <button class="project-subtab-button active" onclick="showProjectSubtab('goals')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <circle cx="12" cy="12" r="6"/>
+                            <circle cx="12" cy="12" r="2"/>
+                        </svg>
+                        Goals
+                    </button>
+                    <button class="project-subtab-button" onclick="showProjectSubtab('results')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                            <polyline points="14,2 14,8 20,8"/>
+                        </svg>
+                        Results
+                    </button>
+                    <button class="project-subtab-button" onclick="showProjectSubtab('import')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14,2 14,8 20,8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                            <polyline points="10,9 9,9 8,9"/>
+                        </svg>
+                        Import
+                    </button>
+                    <button class="project-subtab-button" onclick="showProjectSubtab('settings')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M12 1v6m0 8v6m11-11h-6m-8 0H1m15.485-3.485L17.07 9.93m-10.14 4.14L5.515 12.66m12.97 0L16.07 14.07m-8.14-4.14L6.515 11.34"/>
+                        </svg>
+                        Settings
+                    </button>
+                </div>
+
+                <!-- Goals Tab Content -->
+                <div id="project-subtab-goals" class="project-subtab-content active">
+                    <!-- Goals Management Section -->
+                    <section class="goals-section">
+                    <div class="section-header">
+                        <h2 class="section-title">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <circle cx="12" cy="12" r="6"/>
+                                <circle cx="12" cy="12" r="2"/>
+                            </svg>
+                            Goals
+                        </h2>
+                        <button class="btn btn-primary" onclick="addGoalToProject()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M5 12h14"/>
+                                <path d="M12 5v14"/>
+                            </svg>
+                            Add Goal
+                        </button>
+                    </div>
+                    
+                    <div id="goals-grid" class="goals-grid">
+                        <!-- Goals cards will be loaded here -->
+                    </div>
+                </section>
+                </div>
+
+                <!-- Results Tab Content -->
+                <div id="project-subtab-results" class="project-subtab-content">
+                    <!-- Test Execution Section -->
+                    <section class="execution-section">
+                    <div class="section-header">
+                        <h2 class="section-title">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="5 3 19 12 5 21 5 3"/>
+                            </svg>
+                            Test Execution
+                        </h2>
+                    </div>
+                    
+                    <div class="execution-controls">
+                        <div class="batch-config">
+                            <div class="config-group">
+                                <label for="batchRunName" class="config-label">Batch Run Name</label>
+                                <input type="text" id="batchRunName" class="config-input" placeholder="Enter batch run name" />
+                            </div>
+                            <div class="config-group">
+                                <label for="maxConcurrency" class="config-label">Concurrency</label>
+                                <select id="maxConcurrency" class="config-select">
+                                    <option value="1">1 (Sequential)</option>
+                                    <option value="2">2</option>
+                                    <option value="3" selected>3 (Recommended)</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+                                </select>
+                            </div>
+                            <div class="config-group">
+                                <button id="run-all-tests-btn" class="btn btn-success btn-large" onclick="startBatchRun()" disabled>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polygon points="5 3 19 12 5 21 5 3"/>
+                                    </svg>
+                                    Run All Tests
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Live Progress Section -->
+                        <div id="live-progress" class="live-progress" style="display: none;">
+                            <!-- Real-time progress will be shown here -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Results & History Section -->
+                <section class="results-section">
+                    <div class="section-header">
+                        <h2 class="section-title">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                                <polyline points="14,2 14,8 20,8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                                <polyline points="10,9 9,9 8,9"/>
+                            </svg>
+                            Recent Results
+                        </h2>
+                        <button class="btn btn-secondary" onclick="loadProjectTestSessions()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                                <path d="M21 3v5h-5"/>
+                                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                                <path d="M8 16H3v5"/>
+                            </svg>
+                            Refresh
+                        </button>
+                    </div>
+                    
+                    <div id="project-test-sessions" class="results-grid">
+                        <!-- Test results will be loaded here -->
+                    </div>
+                    
+                    <div id="batch-runs-history" class="batch-runs-history">
+                        <!-- Recent batch runs will be loaded here -->
+                    </div>
+                </section>
+                </div>
+
+                <!-- Import Tab Content -->
+                <div id="project-subtab-import" class="project-subtab-content">
+                    <section class="import-section">
+                        <div class="section-header">
+                            <h2 class="section-title">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14,2 14,8 20,8"/>
+                                    <line x1="16" y1="13" x2="8" y2="13"/>
+                                    <line x1="16" y1="17" x2="8" y2="17"/>
+                                    <polyline points="10,9 9,9 8,9"/>
+                                </svg>
+                                Conversation Import & Goal Generation
+                            </h2>
+                        </div>
+                        <div class="import-placeholder">
+                            <p>Import functionality will be moved here from the global tab.</p>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Settings Tab Content -->
+                <div id="project-subtab-settings" class="project-subtab-content">
+                    <section class="settings-section">
+                        <div class="section-header">
+                            <h2 class="section-title">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="3"/>
+                                    <path d="M12 1v6m0 8v6m11-11h-6m-8 0H1m15.485-3.485L17.07 9.93m-10.14 4.14L5.515 12.66m12.97 0L16.07 14.07m-8.14-4.14L6.515 11.34"/>
+                                </svg>
+                                Project Settings
+                            </h2>
+                        </div>
+                        
+                        <div class="settings-form">
+                            <div class="form-group">
+                                <label for="project-goal-prompt">Custom Goal Generation Prompt</label>
+                                <textarea id="project-goal-prompt" class="form-control" rows="8" 
+                                    placeholder="Enter a custom prompt for goal generation from conversations. Use placeholders like {analysis.category}, {conversation.conversation_data}, etc. Leave empty to use default prompt."></textarea>
+                                <div class="form-help">
+                                    <p><strong>Available placeholders:</strong></p>
+                                    <ul>
+                                        <li><code>{analysis.intentAnalysis.primaryIntent}</code> - Primary intent of the conversation</li>
+                                        <li><code>{analysis.category}</code> - Conversation category</li>
+                                        <li><code>{analysis.complexity.level}</code> - Complexity level</li>
+                                        <li><code>{analysis.resolution}</code> - How the conversation was resolved</li>
+                                        <li><code>{conversation.conversation_data}</code> - Full conversation content</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <button class="btn btn-primary" onclick="saveProjectSettings()">Save Settings</button>
+                                <button class="btn btn-secondary" onclick="resetProjectPrompt()">Reset to Default</button>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </main>
+        </div>
+
+        <!-- Add Goal Modal -->
+        <div id="add-goal-modal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeAddGoalModal()">&times;</span>
+                <h2>Create New Goal</h2>
+                
+
+                <form id="addGoalForm">
+                    <div class="form-group">
+                        <label for="newGoalName">Goal Name: <span class="required">*</span></label>
+                        <input type="text" id="newGoalName" name="name" required placeholder="Enter a descriptive name for your test goal">
+                    </div>
+                    <div class="form-group">
+                        <label for="newGoalDescription">Description:</label>
+                        <textarea id="newGoalDescription" name="description" rows="3" placeholder="Describe what this test aims to accomplish"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="newGoalSteps">Test Steps (one per line):</label>
+                        <textarea id="newGoalSteps" name="steps" rows="5" placeholder="Step 1: Greet the agent&#10;Step 2: Explain the issue&#10;Step 3: Provide required information&#10;Step 4: Confirm resolution"></textarea>
+                        <small>These are the conversation steps the testing agent will follow</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="newGoalValidation">Validation Criteria (one per line):</label>
+                        <textarea id="newGoalValidation" name="validationCriteria" rows="4" placeholder="Case record created in Salesforce&#10;Case has correct status&#10;Case assigned to appropriate queue&#10;Customer notification sent"></textarea>
+                        <small>Define what constitutes a successful test outcome</small>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-success">✅ Create Goal</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeAddGoalModal()">❌ Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Note: Batch Test Monitor is now inline in the project view -->
+
+
+        <!-- Connections Tab -->
+        <div id="connections-tab" class="tab-content">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                    </svg>
+                    API Connections
+                </h2>
+            </div>
+
+            <div class="connections-grid">
+                <div class="connection-card">
+                    <div class="connection-header">
+                        <div class="connection-icon salesforce">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/>
+                                <polygon points="12 2 22 8.5 12 15 2 8.5 12 2"/>
+                                <polyline points="2,17 12,22 22,17"/>
+                                <polyline points="2,12 12,17 22,12"/>
+                            </svg>
+                        </div>
+                        <div class="connection-info">
+                            <h3>MIAW Connection</h3>
+                            <p>Messaging for In-App and Web API</p>
+                        </div>
+                    </div>
+                    
+                    <div class="connection-status">
+                        <div id="sf-status" class="status">Not tested</div>
+                    </div>
+                    
+                    <div class="connection-description">
+                        <p>Tests unauthenticated token generation for Messaging for In-App and Web API</p>
+                    </div>
+                    
+                    <div class="connection-actions">
+                        <button class="btn btn-primary" onclick="testSalesforceConnection()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 12l2 2 4-4"/>
+                                <circle cx="12" cy="12" r="10"/>
+                            </svg>
+                            Test Connection
+                        </button>
+                    </div>
+                </div>
+
+                <div class="connection-card">
+                    <div class="connection-header">
+                        <div class="connection-icon openai">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+                            </svg>
+                        </div>
+                        <div class="connection-info">
+                            <h3>OpenAI Connection</h3>
+                            <p>AI Model API Integration</p>
+                        </div>
+                    </div>
+                    
+                    <div class="connection-status">
+                        <div id="openai-status" class="status">Not tested</div>
+                    </div>
+                    
+                    <div class="connection-description">
+                        <p>Validates OpenAI API key and model access for AI-powered testing capabilities</p>
+                    </div>
+                    
+                    <div class="connection-actions">
+                        <button class="btn btn-primary" onclick="testOpenAIConnection()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 12l2 2 4-4"/>
+                                <circle cx="12" cy="12" r="10"/>
+                            </svg>
+                            Test Connection
+                        </button>
+                    </div>
+                </div>
+
+                <div class="connection-card">
+                    <div class="connection-header">
+                        <div class="connection-icon messaging">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                            </svg>
+                        </div>
+                        <div class="connection-info">
+                            <h3>Messaging API Test</h3>
+                            <p>Live Chat Integration</p>
+                        </div>
+                    </div>
+                    
+                    <div class="connection-status">
+                        <div id="messaging-status" class="status">Not tested</div>
+                    </div>
+                    
+                    <div class="connection-description">
+                        <p>Send test messages through the chat interface to validate message flow</p>
+                    </div>
+                    
+                    <div class="connection-actions">
+                        <div class="form-group">
+                            <input type="text" id="test-message" class="config-input" placeholder="Enter test message">
+                        </div>
+                        <button class="btn btn-primary" onclick="testMessaging()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 2l-7 20-4-9-9-4z"/>
+                                <path d="M22 2l-11 11"/>
+                            </svg>
+                            Send Test Message
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Conversation Import Tab removed - now part of project subtabs -->
+            <div class="section-header">
+                <h2 class="section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                        <path d="M9 10h6"/>
+                        <path d="M9 14h6"/>
+                    </svg>
+                    Conversation Import & AI Goal Generation
+                </h2>
+            </div>
+
+            <!-- Upload Section -->
+            <section class="import-section">
+                <div class="import-section-header">
+                    <h3>Step 1: Upload Conversation Data</h3>
+                    <p>Upload a CSV file containing human-to-human conversations to automatically generate AI test goals.</p>
+                </div>
+
+                <div class="upload-container">
+                    <div class="upload-zone" id="upload-zone">
+                        <div class="upload-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7,10 12,15 17,10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                        </div>
+                        <h4>Drop your CSV file here or click to browse</h4>
+                        <p>Supported format: conversation_id, conversation_data (any format)</p>
+                        <p class="file-requirements">Maximum file size: 50MB</p>
+                        <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
+                        <button class="btn btn-primary" onclick="document.getElementById('csv-file-input').click()">
+                            Choose File
+                        </button>
+                    </div>
+
+                    <div class="upload-options">
+                        <div class="form-group">
+                            <label for="target-project">Target Project:</label>
+                            <select id="target-project" class="config-select">
+                                <option value="">Select a project for generated goals</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="batch-size">Processing Batch Size:</label>
+                            <select id="batch-size" class="config-select">
+                                <option value="5">5 conversations (slower, more reliable)</option>
+                                <option value="10" selected>10 conversations (recommended)</option>
+                                <option value="20">20 conversations (faster, may hit rate limits)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="generate-goals" checked>
+                                Generate test goals from conversations
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Processing Section -->
+            <section class="import-section" id="processing-section" style="display: none;">
+                <div class="import-section-header">
+                    <h3>Step 2: Processing Conversations</h3>
+                    <p>AI is analyzing conversations and generating test goals...</p>
+                </div>
+
+                <div class="processing-container">
+                    <div class="processing-status">
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill" id="processing-progress"></div>
+                        </div>
+                        <div class="progress-text" id="processing-text">Initializing...</div>
+                    </div>
+
+                    <div class="processing-stats" id="processing-stats">
+                        <div class="stat-card">
+                            <div class="stat-number" id="processed-count">0</div>
+                            <div class="stat-label">Processed</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="generated-goals">0</div>
+                            <div class="stat-label">Goals Generated</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="error-count">0</div>
+                            <div class="stat-label">Errors</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="import-section" id="results-section" style="display: none;">
+                <div class="import-section-header">
+                    <h3>Step 3: Review & Import Generated Goals</h3>
+                    <p>Review the AI-generated test goals and import them to your project.</p>
+                </div>
+
+                <div class="results-container">
+                    <div class="results-summary" id="results-summary">
+                        <!-- Summary will be populated here -->
+                    </div>
+
+                    <div class="results-tabs">
+                        <button class="tab-button active" onclick="showResultsTab('goals')">Generated Goals</button>
+                        <button class="tab-button" onclick="showResultsTab('analytics')">Analytics</button>
+                        <button class="tab-button" onclick="showResultsTab('errors')">Errors</button>
+                    </div>
+
+                    <div class="results-content">
+                        <div id="goals-results" class="results-tab-content active">
+                            <div class="goals-actions">
+                                <button class="btn btn-primary" onclick="selectAllGoals()">Select All</button>
+                                <button class="btn btn-secondary" onclick="selectNoneGoals()">Select None</button>
+                                <button class="btn btn-success" onclick="importSelectedGoals()">Import Selected Goals</button>
+                            </div>
+                            <div id="generated-goals-list" class="generated-goals-list">
+                                <!-- Generated goals will be populated here -->
+                            </div>
+                        </div>
+
+                        <div id="analytics-results" class="results-tab-content">
+                            <div id="conversation-analytics">
+                                <!-- Analytics charts and data will be populated here -->
+                            </div>
+                        </div>
+
+                        <div id="errors-results" class="results-tab-content">
+                            <div id="processing-errors">
+                                <!-- Error details will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sample Data Section -->
+            <section class="import-section">
+                <div class="import-section-header">
+                    <h3>Sample CSV Format</h3>
+                    <p>Your CSV should follow this structure:</p>
+                </div>
+
+                <div class="sample-container">
+                    <pre class="sample-csv">conversation_id,conversation_data
+conv_001,"Customer: Hi, I'm having trouble with my order #12345
+Agent: I'm sorry to hear that. Let me look that up for you.
+Customer: It was supposed to arrive yesterday but I haven't received it.
+Agent: I see the package is delayed due to weather. It should arrive tomorrow."
+conv_002,"Customer: I need to return a product
+Agent: I can help with that. What's the reason for the return?
+Customer: It doesn't fit properly
+Agent: No problem. I'll send you a prepaid return label."</pre>
+                    
+                    <div class="sample-notes">
+                        <h4>Requirements:</h4>
+                        <ul>
+                            <li><strong>conversation_id:</strong> Unique identifier for each conversation</li>
+                            <li><strong>conversation_data:</strong> The conversation in any text format (plain text, JSON, XML, etc.)</li>
+                            <li><strong>Flexible format:</strong> Can be structured JSON, chat logs, transcripts, or any readable format</li>
+                            <li><strong>AI processing:</strong> Our AI will automatically parse and understand the conversation structure</li>
+                        </ul>
+                        
+                        <h4>Supported Conversation Formats:</h4>
+                        <ul>
+                            <li>Plain text with speaker labels (Customer:, Agent:)</li>
+                            <li>JSON with messages array</li>
+                            <li>Chat transcripts with timestamps</li>
+                            <li>XML or other structured formats</li>
+                            <li>Any format that clearly shows the conversation flow</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Admin Tab -->
+        <div id="admin-tab" class="tab-content">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 3a6.364 6.364 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+                    </svg>
+                    System Administration
+                </h2>
+                <button class="btn btn-secondary" onclick="refreshSystemStatus()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                        <path d="M21 3v5h-5"/>
+                        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                        <path d="M8 16H3v5"/>
+                    </svg>
+                    Refresh Status
+                </button>
+            </div>
+
+            <!-- System Status Section -->
+            <section class="admin-section">
+                <div class="admin-section-header">
+                    <h3>System Status</h3>
+                    <div id="system-status-indicator" class="status-indicator">
+                        <span class="status-dot status-unknown"></span>
+                        <span class="status-text">Checking...</span>
+                    </div>
+                </div>
+                
+                <div class="system-metrics">
+                    <div class="metric-card">
+                        <div class="metric-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 6 6 18"/>
+                                <path d="m6 6 12 12"/>
+                            </svg>
+                        </div>
+                        <div class="metric-content">
+                            <div class="metric-value" id="active-sessions">0</div>
+                            <div class="metric-label">Active Sessions</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card">
+                        <div class="metric-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                            </svg>
+                        </div>
+                        <div class="metric-content">
+                            <div class="metric-value" id="total-projects">0</div>
+                            <div class="metric-label">Total Projects</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card">
+                        <div class="metric-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <circle cx="12" cy="12" r="6"/>
+                                <circle cx="12" cy="12" r="2"/>
+                            </svg>
+                        </div>
+                        <div class="metric-content">
+                            <div class="metric-value" id="total-goals">0</div>
+                            <div class="metric-label">Total Goals</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card">
+                        <div class="metric-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                                <polyline points="14,2 14,8 20,8"/>
+                            </svg>
+                        </div>
+                        <div class="metric-content">
+                            <div class="metric-value" id="total-tests">0</div>
+                            <div class="metric-label">Total Tests</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Debug Logs Section -->
+            <section class="admin-section">
+                <div class="admin-section-header">
+                    <h3>Debug Logs</h3>
+                    <div class="log-controls">
+                        <select id="log-level-filter" class="config-select">
+                            <option value="all">All Levels</option>
+                            <option value="error">Error</option>
+                            <option value="warn">Warning</option>
+                            <option value="info">Info</option>
+                            <option value="debug">Debug</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" onclick="clearLogs()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h18"/>
+                                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                            </svg>
+                            Clear
+                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="refreshLogs()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                                <path d="M21 3v5h-5"/>
+                            </svg>
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="logs-container">
+                    <div id="debug-logs" class="debug-logs">
+                        <div class="log-placeholder">
+                            <div class="placeholder-icon">📋</div>
+                            <p>Debug logs will appear here...</p>
+                            <p class="placeholder-hint">Click "Refresh" to load recent system logs</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- API Monitoring Section -->
+            <section class="admin-section">
+                <div class="admin-section-header">
+                    <h3>API Monitoring</h3>
+                    <div class="monitoring-status">
+                        <span class="status-dot status-success"></span>
+                        <span>Real-time monitoring active</span>
+                    </div>
+                </div>
+                
+                <div class="api-endpoints">
+                    <div class="endpoint-card">
+                        <div class="endpoint-header">
+                            <span class="endpoint-method get">GET</span>
+                            <span class="endpoint-path">/api/projects</span>
+                            <span class="endpoint-status status-success">200</span>
+                        </div>
+                        <div class="endpoint-metrics">
+                            <span class="metric">Response: 45ms</span>
+                            <span class="metric">Last call: 2 min ago</span>
+                        </div>
+                    </div>
+                    
+                    <div class="endpoint-card">
+                        <div class="endpoint-header">
+                            <span class="endpoint-method post">POST</span>
+                            <span class="endpoint-path">/api/projects/:id/batch-run</span>
+                            <span class="endpoint-status status-success">201</span>
+                        </div>
+                        <div class="endpoint-metrics">
+                            <span class="metric">Response: 120ms</span>
+                            <span class="metric">Last call: 5 min ago</span>
+                        </div>
+                    </div>
+                    
+                    <div class="endpoint-card">
+                        <div class="endpoint-header">
+                            <span class="endpoint-method get">GET</span>
+                            <span class="endpoint-path">/api/test-sessions</span>
+                            <span class="endpoint-status status-success">200</span>
+                        </div>
+                        <div class="endpoint-metrics">
+                            <span class="metric">Response: 78ms</span>
+                            <span class="metric">Last call: 1 min ago</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Test Modal -->
+        <div id="test-modal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeTestModal()">&times;</span>
+                <h2>Test Session Details</h2>
+                <div id="test-details">
+                    <!-- Test details will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Generic Modal for other content -->
+        <div id="generic-modal" class="modal">
+            <div class="modal-content">
+                <div id="generic-modal-body">
+                    <!-- Generic modal content will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
