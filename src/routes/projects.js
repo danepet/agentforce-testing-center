@@ -136,8 +136,14 @@ router.get('/:id/test-sessions', async (req, res) => {
 // Create new goal directly in project
 router.post('/:id/goals', async (req, res) => {
   try {
-    const { name, description, validationCriteria, steps } = req.body;
+    const { name, description, validationCriteria, steps, sourceConversationId, sourceConversationData } = req.body;
     const projectId = req.params.id;
+    
+    // Debug: Log what source conversation data we're receiving
+    console.log(`[Projects Route] Creating goal "${name}"`);
+    console.log(`[Projects Route] sourceConversationId: ${sourceConversationId}`);
+    console.log(`[Projects Route] Has sourceConversationData: ${sourceConversationData ? 'YES' : 'NO'}`);
+    console.log(`[Projects Route] sourceConversationData length: ${sourceConversationData ? sourceConversationData.length : 0}`);
     
     if (!name) {
       return res.status(400).json({ error: 'Goal name is required' });
@@ -155,6 +161,8 @@ router.post('/:id/goals', async (req, res) => {
       validationCriteria: validationCriteria || [],
       steps: steps || [],
       projectId,
+      sourceConversationId,
+      sourceConversationData,
       enabled: true
     });
 

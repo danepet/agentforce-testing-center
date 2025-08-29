@@ -188,6 +188,7 @@ router.post('/jobs/:jobId/import', async (req, res) => {
                     }
                 }
                 
+
                 // Create the goal
                 const goal = await Goal.create({
                     name: goalData.name,

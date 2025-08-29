@@ -19,6 +19,7 @@ class Goal {
   static async create(goalData) {
     const goal = new Goal(goalData);
     
+    
     return new Promise((resolve, reject) => {
       const stmt = db.prepare(`
         INSERT INTO goals (id, name, description, validation_criteria, steps, project_id, source_conversation_id, source_conversation_data, enabled)

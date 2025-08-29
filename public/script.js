@@ -93,8 +93,29 @@ const goalTemplates = {
 document.addEventListener('DOMContentLoaded', function() {
     loadProjects();
     
-    document.getElementById('projectForm').addEventListener('submit', handleProjectSubmit);
-    document.getElementById('addGoalForm').addEventListener('submit', handleAddGoalSubmit);
+    const projectForm = document.getElementById('projectForm');
+    if (projectForm) {
+        projectForm.addEventListener('submit', handleProjectSubmit);
+    }
+    
+    const addGoalForm = document.getElementById('addGoalForm');
+    if (addGoalForm) {
+        addGoalForm.addEventListener('submit', handleAddGoalSubmit);
+    }
+});
+
+// Cleanup when the page is being unloaded
+window.addEventListener('beforeunload', function() {
+    // Stop admin auto-refresh
+    stopAdminAutoRefresh();
+    
+    // Clear any monitoring flags
+    isMonitoringProgress = false;
+    isPollingProjectProgress = false;
+    
+    // Reset current jobs to prevent zombie polling
+    currentProcessingJob = null;
+    projectCurrentProcessingJob = null;
 });
 
 function showTab(tabName) {
@@ -104,9 +125,29 @@ function showTab(tabName) {
     tabs.forEach(tab => tab.classList.remove('active'));
     buttons.forEach(button => button.classList.remove('active'));
     
-    document.getElementById(`${tabName}-tab`).classList.add('active');
-    document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
+    const targetTab = document.getElementById(`${tabName}-tab`);
+    if (targetTab) {
+        targetTab.classList.add('active');
+    }
     
+    const targetButton = document.querySelector(`[onclick="showTab('${tabName}')"]`);
+    if (targetButton) {
+        targetButton.classList.add('active');
+    }
+    
+    // Handle tab-specific initialization
+    if (tabName === 'admin') {
+        // Initialize admin tab
+        refreshSystemStatus();
+        startAdminAutoRefresh();
+    } else {
+        stopAdminAutoRefresh();
+    }
+    
+    if (tabName === 'conversations') {
+        // Initialize conversation import tab
+        initializeConversationImport();
+    }
 }
 
 
@@ -281,7 +322,10 @@ async function showTestDetails(sessionId) {
 }
 
 function closeTestModal() {
-    document.getElementById('test-modal').style.display = 'none';
+    const testModal = document.getElementById('test-modal');
+    if (testModal) {
+        testModal.style.display = 'none';
+    }
 }
 
 async function deleteGoal(goalId) {
@@ -640,14 +684,30 @@ function displayProjects() {
                     </svg>
                     Edit
                 </button>
+                <button class="btn btn-danger" onclick="deleteProject('${project.id}')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3,6 5,6 21,6"/>
+                        <path d="M19,6V20a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6M8,6V4a2,2,0,0,1,2-2h4a2,2,0,0,1,2,2V6"/>
+                        <line x1="10" y1="11" x2="10" y2="17"/>
+                        <line x1="14" y1="11" x2="14" y2="17"/>
+                    </svg>
+                    Delete
+                </button>
             </div>
         </div>
     `).join('');
 }
 
 function showProjectForm() {
-    document.getElementById('project-form').style.display = 'block';
-    document.getElementById('projectName').focus();
+    const projectForm = document.getElementById('project-form');
+    if (projectForm) {
+        projectForm.style.display = 'block';
+    }
+    
+    const projectNameInput = document.getElementById('projectName');
+    if (projectNameInput) {
+        projectNameInput.focus();
+    }
 }
 
 function hideProjectForm() {
@@ -848,6 +908,62 @@ async function loadProjectBatchRuns() {
     } catch (error) {
         showNotification('Error loading batch runs: ' + error.message, 'error');
     }
+}
+
+async function loadProjectTestSessions() {
+    if (!currentProject) {
+        showNotification('No project selected', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/projects/${currentProject.id}/test-sessions`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch test sessions: ${response.statusText}`);
+        }
+        const testSessions = await response.json();
+        
+        // Update the test sessions display
+        const testSessionsElement = document.getElementById('project-test-sessions');
+        if (testSessionsElement) {
+            testSessionsElement.innerHTML = renderTestSessions(testSessions);
+        }
+        
+        showNotification('Test sessions loaded successfully', 'success');
+    } catch (error) {
+        console.error('Error loading test sessions:', error);
+        showNotification('Failed to load test sessions', 'error');
+    }
+}
+
+function renderTestSessions(testSessions) {
+    if (!testSessions || testSessions.length === 0) {
+        return `
+            <div class="empty-state">
+                <div class="empty-icon">🧪</div>
+                <h3>No Test Sessions</h3>
+                <p>No test sessions have been run for this project yet.</p>
+            </div>
+        `;
+    }
+    
+    return testSessions.map(session => `
+        <div class="test-session-card">
+            <div class="test-session-header">
+                <h4>${escapeHtml(session.goalName || 'Unknown Goal')}</h4>
+                <span class="test-status ${session.status}">${session.status}</span>
+            </div>
+            <div class="test-session-details">
+                <p><strong>Score:</strong> ${session.score || 0}%</p>
+                <p><strong>Duration:</strong> ${session.duration ? Math.round(session.duration / 1000 / 60) : 'N/A'} min</p>
+                <p><strong>Started:</strong> ${new Date(session.createdAt).toLocaleString()}</p>
+                ${session.endReason ? `<p><strong>End Reason:</strong> ${escapeHtml(session.endReason)}</p>` : ''}
+            </div>
+            <div class="test-session-actions">
+                <button class="btn btn-secondary btn-sm" onclick="showTestSessionDetails('${session.id}')">View Details</button>
+            </div>
+        </div>
+    `).join('');
 }
 
 function renderProjectBatchRuns() {
@@ -1561,6 +1677,121 @@ function editGoal(goalId) {
     document.getElementById('add-goal-modal').style.display = 'block';
 }
 
+async function editProject(projectId) {
+    try {
+        // First load the project data
+        const response = await fetch(`${API_BASE}/projects/${projectId}`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch project: ${response.statusText}`);
+        }
+        const project = await response.json();
+        
+        // Populate the project form with project data
+        const projectNameEl = document.getElementById('projectName');
+        const projectDescEl = document.getElementById('projectDescription');
+        const projectTagsEl = document.getElementById('projectTags');
+        const miawOrgIdEl = document.getElementById('miawOrgId');
+        const miawDeploymentNameEl = document.getElementById('miawDeploymentName');
+        const miawBaseUrlEl = document.getElementById('miawBaseUrl');
+        
+        if (projectNameEl) projectNameEl.value = project.name || '';
+        if (projectDescEl) projectDescEl.value = project.description || '';
+        if (projectTagsEl) projectTagsEl.value = project.tags ? project.tags.join(', ') : '';
+        if (miawOrgIdEl) miawOrgIdEl.value = project.miawOrgId || '';
+        if (miawDeploymentNameEl) miawDeploymentNameEl.value = project.miawDeploymentName || '';
+        if (miawBaseUrlEl) miawBaseUrlEl.value = project.miawBaseUrl || '';
+        
+        // Populate routing attributes
+        if (project.miawRoutingAttributes) {
+            try {
+                const attributes = JSON.parse(project.miawRoutingAttributes);
+                populateRoutingAttributes(JSON.stringify(attributes));
+            } catch (e) {
+                console.warn('Failed to parse routing attributes:', e);
+            }
+        }
+        
+        // Set form to edit mode
+        const projectFormEl = document.getElementById('projectForm');
+        if (projectFormEl) {
+            projectFormEl.dataset.editingProjectId = projectId;
+        }
+        
+        // Update form title
+        const formTitle = document.querySelector('#project-form h3');
+        if (formTitle) formTitle.textContent = 'Edit Project';
+        
+        // Show the modal backdrop and form
+        let backdrop = document.getElementById('modal-backdrop');
+        if (!backdrop) {
+            backdrop = document.createElement('div');
+            backdrop.id = 'modal-backdrop';
+            backdrop.className = 'modal-backdrop';
+            document.body.appendChild(backdrop);
+        }
+        backdrop.style.display = 'flex';
+        
+        // Show the form
+        const formContainer = document.getElementById('project-form');
+        if (formContainer) {
+            formContainer.style.display = 'block';
+        }
+        
+        // Focus on project name
+        if (projectNameEl) {
+            setTimeout(() => projectNameEl.focus(), 100);
+        }
+        
+    } catch (error) {
+        console.error('Error editing project:', error);
+        showNotification('Failed to load project for editing', 'error');
+    }
+}
+
+async function deleteProject(projectId) {
+    // Find the project to get its name for the confirmation
+    const project = projects.find(p => p.id === projectId);
+    const projectName = project ? project.name : 'this project';
+    
+    if (!confirm(`Are you sure you want to delete "${projectName}"? This will also delete all goals, test sessions, and batch runs associated with this project. This action cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/projects/${projectId}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to delete project: ${response.statusText}`);
+        }
+        
+        // If we're currently viewing the deleted project, go back to projects list
+        if (currentProject && currentProject.id === projectId) {
+            backToProjects();
+        }
+        
+        // Refresh the projects list
+        await loadProjects();
+        
+        showNotification(`Project "${projectName}" deleted successfully`, 'success');
+        
+    } catch (error) {
+        console.error('Error deleting project:', error);
+        showNotification('Failed to delete project', 'error');
+    }
+}
+
+function deleteCurrentProject() {
+    if (!currentProject) {
+        showNotification('No project selected', 'error');
+        return;
+    }
+    
+    // Use the existing deleteProject function
+    deleteProject(currentProject.id);
+}
+
 function editCurrentProject() {
     console.log('editCurrentProject called, currentProject:', currentProject);
     
@@ -1977,28 +2208,12 @@ function stopAdminAutoRefresh() {
     }
 }
 
-// Initialize admin tab when it becomes active
-const originalShowTab = showTab;
-showTab = function(tabName) {
-    originalShowTab(tabName);
-    
-    if (tabName === 'admin') {
-        // Initialize admin tab
-        refreshSystemStatus();
-        startAdminAutoRefresh();
-    } else {
-        stopAdminAutoRefresh();
-    }
-    
-    if (tabName === 'conversations') {
-        // Initialize conversation import tab
-        initializeConversationImport();
-    }
-};
+// Tab initialization is now handled in the main showTab function above
 
 // Conversation Import Functions
 let currentProcessingJob = null;
 let selectedGoals = new Set();
+let isMonitoringProgress = false;
 
 function initializeConversationImport() {
     // Load projects for the dropdown
@@ -2133,7 +2348,9 @@ async function uploadCSVFile(file) {
 }
 
 async function monitorProcessingProgress() {
-    if (!currentProcessingJob) return;
+    if (!currentProcessingJob || isMonitoringProgress) return;
+    
+    isMonitoringProgress = true;
     
     try {
         const response = await fetch(`${API_BASE}/conversations/jobs/${currentProcessingJob}/status`);
@@ -2149,15 +2366,19 @@ async function monitorProcessingProgress() {
         
         if (status.status === 'completed') {
             showNotification('Processing completed!', 'success');
+            isMonitoringProgress = false;
             loadProcessingResults();
         } else if (status.status === 'failed') {
+            isMonitoringProgress = false;
             throw new Error('Processing failed');
         } else {
             // Continue monitoring
+            isMonitoringProgress = false;
             setTimeout(monitorProcessingProgress, 2000);
         }
         
     } catch (error) {
+        isMonitoringProgress = false;
         console.error('Monitoring error:', error);
         showNotification(`Processing error: ${error.message}`, 'error');
     }
@@ -3052,6 +3273,7 @@ Return JSON in this exact format:
 
 // Project Import Functions
 let projectCurrentProcessingJob = null;
+let isPollingProjectProgress = false;
 let projectSelectedGoals = new Set();
 
 function initializeProjectImport() {
@@ -3203,7 +3425,9 @@ function updateProjectProgress(percentage, message, details = null) {
 }
 
 async function pollProjectProgress() {
-    if (!projectCurrentProcessingJob) return;
+    if (!projectCurrentProcessingJob || isPollingProjectProgress) return;
+    
+    isPollingProjectProgress = true;
     
     try {
         const response = await fetch(`${API_BASE}/conversations/import/${projectCurrentProcessingJob}/status`);
@@ -3220,12 +3444,15 @@ async function pollProjectProgress() {
             );
             
             // Continue polling
+            isPollingProjectProgress = false;
             setTimeout(pollProjectProgress, 1000);
         } else if (status.status === 'completed') {
             updateProjectProgress(100, 'Processing completed!');
             
             // Load generated goals
             await loadProjectGeneratedGoals(projectCurrentProcessingJob);
+            
+            isPollingProjectProgress = false;
             
             // Hide processing status after a short delay
             setTimeout(() => {
@@ -3234,10 +3461,12 @@ async function pollProjectProgress() {
             }, 2000);
             
         } else if (status.status === 'failed' || status.status === 'error') {
+            isPollingProjectProgress = false;
             throw new Error(status.error || 'Processing failed');
         }
         
     } catch (error) {
+        isPollingProjectProgress = false;
         console.error('Error polling progress:', error);
         showNotification('Error processing conversations: ' + error.message, 'error');
         resetProjectImportState();
@@ -3365,6 +3594,7 @@ async function saveSelectedProjectGoals() {
                     steps: goal.steps,
                     validationCriteria: goal.validationCriteria,
                     sourceConversationId: goal.sourceConversationId,
+                    sourceConversationData: goal.sourceConversationData,
                     category: goal.category,
                     complexity: goal.complexity,
                     expectedOutcomes: goal.expectedOutcomes,
