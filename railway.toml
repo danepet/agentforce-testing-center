@@ -1,0 +1,15 @@
+[build]
+builder = "DOCKERFILE"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+
+[[services]]
+name = "agentforce-testing-center"
+dockerfile = "Dockerfile"
+
+[services.variables]
+PORT = "3000"
+NODE_ENV = "production"

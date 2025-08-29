@@ -24,7 +24,8 @@
       "Bash(grep:*)",
       "Bash(sed:*)",
       "Bash(pkill:*)",
-      "Bash(touch:*)"
+      "Bash(touch:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
