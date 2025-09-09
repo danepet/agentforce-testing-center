@@ -24,6 +24,8 @@ const initializeTables = () => {
         priority INTEGER DEFAULT 1,
         enabled BOOLEAN DEFAULT 1,
         expected_duration INTEGER,
+        source_conversation_id TEXT,
+        source_conversation_data TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (project_id) REFERENCES projects (id)
