@@ -16,11 +16,27 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
+// Add request logging middleware
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  next();
+});
+
 app.use('/api/goals', goalRoutes);
 app.use('/api/tests', testRoutes);
 app.use('/api/agent', agentRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/conversations', conversationRoutes);
+
+// Add error handling middleware (must be after routes)
+app.use((error, req, res, next) => {
+  console.error(`Error on ${req.method} ${req.path}:`, error);
+  res.status(500).json({ 
+    error: 'Internal server error',
+    message: error.message,
+    path: req.path 
+  });
+});
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
@@ -28,6 +44,11 @@ app.get('/', (req, res) => {
 
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// Handle favicon requests
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).end();
 });
 
 const server = app.listen(PORT, '0.0.0.0', () => {
