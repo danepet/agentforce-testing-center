@@ -1,13 +1,24 @@
+console.log('Starting Agentforce Testing Center...');
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-require('dotenv').config();
 
+console.log('Loading environment variables...');
+require('dotenv').config();
+console.log('Environment loaded. NODE_ENV:', process.env.NODE_ENV);
+
+console.log('Loading route modules...');
 const goalRoutes = require('./routes/goals');
+console.log('✓ Goal routes loaded');
 const testRoutes = require('./routes/tests');
+console.log('✓ Test routes loaded');  
 const agentRoutes = require('./routes/agent');
+console.log('✓ Agent routes loaded');
 const projectRoutes = require('./routes/projects');
+console.log('✓ Project routes loaded');
 const conversationRoutes = require('./routes/conversations');
+console.log('✓ Conversation routes loaded');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,12 +62,14 @@ app.get('/favicon.ico', (req, res) => {
   res.status(204).end();
 });
 
+console.log('Starting server...');
 const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Agentforce Testing Center running on port ${PORT}`);
-  console.log(`Dashboard: http://localhost:${PORT}`);
-  console.log(`API Health: http://localhost:${PORT}/health`);
-  console.log('Environment PORT:', process.env.PORT);
-  console.log('Using PORT:', PORT);
+  console.log(`🚀 Agentforce Testing Center running on port ${PORT}`);
+  console.log(`📊 Dashboard: http://localhost:${PORT}`);
+  console.log(`🔍 API Health: http://localhost:${PORT}/health`);
+  console.log('🌐 Environment PORT:', process.env.PORT);
+  console.log('⚙️  Using PORT:', PORT);
+  console.log('✅ Server started successfully!');
 });
 
 // Graceful shutdown
