@@ -148,13 +148,17 @@ app.use((error, req, res, next) => {
   });
 });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found' });
-});
-
+// Route handlers
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/login.html'));
+});
+
+app.get('/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/dashboard.html'));
 });
 
 app.get('/health', (req, res) => {
@@ -164,6 +168,11 @@ app.get('/health', (req, res) => {
 // Handle favicon requests
 app.get('/favicon.ico', (req, res) => {
   res.status(204).end();
+});
+
+// 404 handler (must be last)
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
 });
 
 // Initialize database and start server

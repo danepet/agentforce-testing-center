@@ -12,7 +12,7 @@ router.get('/google/callback',
   (req, res) => {
     // Successful authentication
     console.log('User authenticated successfully:', req.user.email);
-    res.redirect('/?auth=success');
+    res.redirect('/dashboard');
   }
 );
 
@@ -29,7 +29,7 @@ router.post('/logout', (req, res) => {
         return res.status(500).json({ error: 'Failed to destroy session' });
       }
       res.clearCookie('connect.sid');
-      res.json({ message: 'Logged out successfully' });
+      res.json({ message: 'Logged out successfully', redirect: '/login' });
     });
   });
 });

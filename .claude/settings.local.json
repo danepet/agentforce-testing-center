@@ -29,7 +29,8 @@
       "Bash(git commit:*)",
       "Bash(gh repo create:*)",
       "Bash(railway login:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(mv:*)"
     ],
     "deny": [],
     "ask": []

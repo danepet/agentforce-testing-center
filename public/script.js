@@ -157,27 +157,33 @@ async function logout() {
         });
         
         if (response.ok) {
-            currentUser = null;
-            showUnauthenticatedState();
-            // Clear projects and show empty state
-            projects = [];
-            displayProjects();
+            const data = await response.json();
+            // Redirect to login page
+            window.location.href = data.redirect || '/login';
         } else {
             console.error('Logout failed');
+            // Fallback redirect
+            window.location.href = '/login';
         }
     } catch (error) {
         console.error('Error logging out:', error);
+        // Fallback redirect on error
+        window.location.href = '/login';
     }
 }
 
 document.addEventListener('DOMContentLoaded', async function() {
-    // Check authentication first
+    // Check authentication and show user info
     const isAuthenticated = await checkAuthStatus();
     
-    // Only load data if authenticated
-    if (isAuthenticated) {
-        loadProjects();
+    if (!isAuthenticated) {
+        // If not authenticated, redirect to login
+        window.location.href = '/login';
+        return;
     }
+    
+    // Load projects since user is authenticated
+    loadProjects();
     
     const projectForm = document.getElementById('projectForm');
     if (projectForm) {
@@ -187,19 +193,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     const addGoalForm = document.getElementById('addGoalForm');
     if (addGoalForm) {
         addGoalForm.addEventListener('submit', handleAddGoalSubmit);
-    }
-    
-    // Check for authentication success redirect
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('auth') === 'success') {
-        // Remove auth parameter from URL
-        window.history.replaceState({}, document.title, window.location.pathname);
-        // Reload authentication status
-        checkAuthStatus().then(isAuth => {
-            if (isAuth) {
-                loadProjects();
-            }
-        });
     }
 });
 
