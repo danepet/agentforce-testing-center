@@ -123,6 +123,19 @@ header {
     flex: 1;
 }
 
+.app-logo {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.logo-image {
+    height: 48px;
+    width: auto;
+    max-width: 200px;
+}
+
+/* Legacy NeuraFlash styles for login page compatibility */
 .neuraflash-logo {
     display: flex;
     align-items: center;
@@ -2841,8 +2854,13 @@ input:checked + .toggle-slider:before {
         gap: var(--space-4);
     }
     
-    .neuraflash-logo {
+    .app-logo, .neuraflash-logo {
         justify-content: center;
+    }
+
+    .logo-image {
+        height: 40px;
+        max-width: 150px;
     }
     
     .header-content h1 {
