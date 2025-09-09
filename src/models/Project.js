@@ -103,31 +103,25 @@ class Project {
         }
 
         try {
-          // Get projects shared with user
-          const sharedProjects = await ProjectShare.findByUserId(userId);
-          const sharedProjectIds = sharedProjects.map(s => s.project_id);
-          
+          // Get projects shared with user via JOIN query
           let sharedRows = [];
-          if (sharedProjectIds.length > 0) {
-            const placeholders = sharedProjectIds.map(() => '?').join(',');
-            sharedRows = await new Promise((resolve, reject) => {
-              db.all(`
-                SELECT p.*, 
-                       COUNT(g.id) as goal_count,
-                       COUNT(CASE WHEN g.enabled = 1 THEN 1 END) as enabled_goals,
-                       ps.permission_level as user_role
-                FROM projects p
-                LEFT JOIN goals g ON p.id = g.project_id
-                LEFT JOIN project_shares ps ON p.id = ps.project_id AND ps.user_id = ?
-                WHERE p.id IN (${placeholders}) AND p.status = 'active'
-                GROUP BY p.id
-                ORDER BY p.created_at DESC
-              `, [userId, ...sharedProjectIds], (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-              });
+          sharedRows = await new Promise((resolve, reject) => {
+            db.all(`
+              SELECT p.*, 
+                     COUNT(g.id) as goal_count,
+                     COUNT(CASE WHEN g.enabled = 1 THEN 1 END) as enabled_goals,
+                     ps.permission_level as user_role
+              FROM projects p
+              INNER JOIN project_shares ps ON p.id = ps.project_id
+              LEFT JOIN goals g ON p.id = g.project_id
+              WHERE ps.user_id = ? AND p.status = 'active'
+              GROUP BY p.id
+              ORDER BY p.created_at DESC
+            `, [userId], (err, rows) => {
+              if (err) reject(err);
+              else resolve(rows || []);
             });
-          }
+          });
 
           // Combine and format results
           const allRows = [...ownedRows, ...sharedRows];

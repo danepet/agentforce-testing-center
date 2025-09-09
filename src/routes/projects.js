@@ -6,14 +6,21 @@ const BatchTestExecutor = require('../services/BatchTestExecutor');
 const Goal = require('../models/Goal');
 const TestSession = require('../models/TestSession');
 const SalesforceClient = require('../services/SalesforceClient');
+const User = require('../models/User');
+const ProjectShare = require('../models/ProjectShare');
+const { validateProjectShare } = require('../middleware/validation');
 
 // Store active batch executors
 const activeBatchExecutors = new Map();
 
-// Get all projects
+// Get all projects for authenticated user
 router.get('/', async (req, res) => {
   try {
-    const projects = await Project.findAll();
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    const projects = await Project.findByUserId(req.user.id);
     res.json(projects);
   } catch (error) {
     console.error('Error fetching projects:', error);
@@ -43,6 +50,10 @@ router.get('/:id', async (req, res) => {
 // Create new project
 router.post('/', async (req, res) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
     const { name, description, createdBy, tags, miawOrgId, miawDeploymentName, miawBaseUrl, miawRoutingAttributes } = req.body;
     
     if (!name) {
@@ -52,7 +63,8 @@ router.post('/', async (req, res) => {
     const project = await Project.create({
       name,
       description,
-      createdBy,
+      userId: req.user.id,
+      createdBy: createdBy || req.user.name,
       tags: tags || [],
       miawOrgId,
       miawDeploymentName,
@@ -283,6 +295,10 @@ router.post('/:id/batch-run', async (req, res) => {
     });
 
     executor.on('batchError', () => {
+      activeBatchExecutors.delete(result.batchRunId);
+    });
+
+    executor.on('batchStopped', () => {
       activeBatchExecutors.delete(result.batchRunId);
     });
 
@@ -754,6 +770,175 @@ router.get('/batch-runs/:batchRunId/export', async (req, res) => {
   } catch (error) {
     console.error('Error exporting batch run CSV:', error);
     res.status(500).json({ error: 'Failed to export batch run results' });
+  }
+});
+
+// Project Sharing Endpoints
+
+// Get project shares (who has access to this project)
+router.get('/:id/shares', async (req, res) => {
+  try {
+    const projectId = req.params.id;
+    
+    // Check if user owns the project or has admin access
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    if (project.user_id !== req.user.id) {
+      const hasAdminAccess = await ProjectShare.hasPermission(projectId, req.user.id, 'admin');
+      if (!hasAdminAccess) {
+        return res.status(403).json({ error: 'Insufficient permissions to view project shares' });
+      }
+    }
+    
+    const shares = await ProjectShare.findByProjectId(projectId);
+    res.json(shares);
+    
+  } catch (error) {
+    console.error('Error fetching project shares:', error);
+    res.status(500).json({ error: 'Failed to fetch project shares' });
+  }
+});
+
+// Share project with user
+router.post('/:id/shares', validateProjectShare, async (req, res) => {
+  try {
+    const projectId = req.params.id;
+    const { email, permissionLevel } = req.body;
+    
+    // Check if user owns the project or has admin access
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    if (project.user_id !== req.user.id) {
+      const hasAdminAccess = await ProjectShare.hasPermission(projectId, req.user.id, 'admin');
+      if (!hasAdminAccess) {
+        return res.status(403).json({ error: 'Insufficient permissions to share this project' });
+      }
+    }
+    
+    // Find user by email
+    const targetUser = await User.findByEmail(email);
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found with that email address' });
+    }
+    
+    // Check if user is trying to share with themselves
+    if (targetUser.id === req.user.id) {
+      return res.status(400).json({ error: 'Cannot share project with yourself' });
+    }
+    
+    // Check if already shared
+    const existingShare = await ProjectShare.findShare(projectId, targetUser.id);
+    if (existingShare) {
+      return res.status(400).json({ error: 'Project is already shared with this user' });
+    }
+    
+    // Create share
+    const share = await ProjectShare.create({
+      projectId,
+      userId: targetUser.id,
+      permissionLevel,
+      sharedBy: req.user.id
+    });
+    
+    res.json({ 
+      message: 'Project shared successfully', 
+      share: {
+        ...share,
+        user_name: targetUser.name,
+        user_email: targetUser.email
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error sharing project:', error);
+    res.status(500).json({ error: 'Failed to share project' });
+  }
+});
+
+// Update project share permissions
+router.put('/:id/shares/:userId', async (req, res) => {
+  try {
+    const { id: projectId, userId } = req.params;
+    const { permissionLevel } = req.body;
+    
+    if (!['read', 'write', 'admin'].includes(permissionLevel)) {
+      return res.status(400).json({ error: 'Invalid permission level' });
+    }
+    
+    // Check if user owns the project or has admin access
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    if (project.user_id !== req.user.id) {
+      const hasAdminAccess = await ProjectShare.hasPermission(projectId, req.user.id, 'admin');
+      if (!hasAdminAccess) {
+        return res.status(403).json({ error: 'Insufficient permissions to modify shares' });
+      }
+    }
+    
+    // Update permission
+    const updated = await ProjectShare.updatePermission(projectId, userId, permissionLevel);
+    if (!updated) {
+      return res.status(404).json({ error: 'Project share not found' });
+    }
+    
+    res.json({ message: 'Permissions updated successfully' });
+    
+  } catch (error) {
+    console.error('Error updating project share:', error);
+    res.status(500).json({ error: 'Failed to update project share' });
+  }
+});
+
+// Remove project share (unshare)
+router.delete('/:id/shares/:userId', async (req, res) => {
+  try {
+    const { id: projectId, userId } = req.params;
+    
+    // Check if user owns the project or has admin access
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    if (project.user_id !== req.user.id) {
+      const hasAdminAccess = await ProjectShare.hasPermission(projectId, req.user.id, 'admin');
+      if (!hasAdminAccess) {
+        return res.status(403).json({ error: 'Insufficient permissions to remove shares' });
+      }
+    }
+    
+    // Remove share
+    const removed = await ProjectShare.remove(projectId, userId);
+    if (!removed) {
+      return res.status(404).json({ error: 'Project share not found' });
+    }
+    
+    res.json({ message: 'Project access revoked successfully' });
+    
+  } catch (error) {
+    console.error('Error removing project share:', error);
+    res.status(500).json({ error: 'Failed to remove project share' });
+  }
+});
+
+// Get projects shared with current user
+router.get('/shared-with-me', async (req, res) => {
+  try {
+    const shares = await ProjectShare.findByUserId(req.user.id);
+    res.json(shares);
+    
+  } catch (error) {
+    console.error('Error fetching shared projects:', error);
+    res.status(500).json({ error: 'Failed to fetch shared projects' });
   }
 });
 

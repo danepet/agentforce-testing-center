@@ -357,6 +357,11 @@ class BatchTestExecutor extends EventEmitter {
       results: this.results,
       successRate
     });
+    
+    // Clean up resources after completion
+    setTimeout(() => {
+      this.cleanup();
+    }, 1000); // Short delay to allow events to be processed
 
     console.log(`Batch run ${this.batchRunId} completed:`, this.results);
   }
@@ -390,6 +395,49 @@ class BatchTestExecutor extends EventEmitter {
     }
 
     this.emit('batchStopped', { batchRunId: this.batchRunId });
+    
+    // Clean up resources and event listeners
+    this.cleanup();
+  }
+
+  cleanup() {
+    // Clear all workers
+    for (const [workerId, worker] of this.activeWorkers) {
+      if (worker && typeof worker.cleanup === 'function') {
+        try {
+          worker.cleanup();
+        } catch (error) {
+          console.error(`Error cleaning up worker ${workerId}:`, error);
+        }
+      }
+    }
+    this.activeWorkers.clear();
+    
+    // Clear queue
+    this.testQueue = [];
+    
+    // Remove all event listeners to prevent memory leaks
+    this.removeAllListeners();
+    
+    // Clean up testing agent if it has cleanup method
+    if (this.testingAgent && typeof this.testingAgent.cleanup === 'function') {
+      try {
+        this.testingAgent.cleanup();
+      } catch (error) {
+        console.error('Error cleaning up testing agent:', error);
+      }
+    }
+    
+    // Reset state
+    this.batchRunId = null;
+    this.projectConfig = null;
+    this.results = {
+      total: 0,
+      completed: 0,
+      successful: 0,
+      failed: 0,
+      errors: []
+    };
   }
 }
 
