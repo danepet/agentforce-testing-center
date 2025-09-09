@@ -30,7 +30,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Agentforce Testing Center running on port ${PORT}`);
   console.log(`Dashboard: http://localhost:${PORT}`);
   console.log(`API Health: http://localhost:${PORT}/health`);
