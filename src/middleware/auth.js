@@ -2,9 +2,20 @@ const ProjectShare = require('../models/ProjectShare');
 
 // Middleware to require authentication
 const requireAuth = (req, res, next) => {
+  console.log('Auth check:', {
+    isAuthenticated: req.isAuthenticated(),
+    hasUser: !!req.user,
+    userId: req.user?.id,
+    sessionID: req.sessionID,
+    method: req.method,
+    path: req.path
+  });
+  
   if (req.isAuthenticated()) {
     return next();
   }
+  
+  console.log('Authentication failed - no valid session');
   res.status(401).json({ error: 'Authentication required' });
 };
 

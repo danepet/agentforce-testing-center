@@ -9,17 +9,17 @@ const SalesforceClient = require('../services/SalesforceClient');
 const User = require('../models/User');
 const ProjectShare = require('../models/ProjectShare');
 const { validateProjectShare } = require('../middleware/validation');
+const { requireAuth } = require('../middleware/auth');
 
 // Store active batch executors
 const activeBatchExecutors = new Map();
 
+// Apply authentication middleware to all routes
+router.use(requireAuth);
+
 // Get all projects for authenticated user
 router.get('/', async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-    
     const projects = await Project.findByUserId(req.user.id);
     res.json(projects);
   } catch (error) {
@@ -50,10 +50,6 @@ router.get('/:id', async (req, res) => {
 // Create new project
 router.post('/', async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-    
     const { name, description, createdBy, tags, miawOrgId, miawDeploymentName, miawBaseUrl, miawRoutingAttributes } = req.body;
     
     if (!name) {
