@@ -34,4 +34,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`Agentforce Testing Center running on port ${PORT}`);
   console.log(`Dashboard: http://localhost:${PORT}`);
   console.log(`API Health: http://localhost:${PORT}/health`);
+  console.log('Environment PORT:', process.env.PORT);
+  console.log('Using PORT:', PORT);
 });
