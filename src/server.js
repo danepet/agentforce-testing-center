@@ -106,6 +106,12 @@ app.use(express.static(path.join(__dirname, '../public')));
 const { addUserContext } = require('./middleware/auth');
 app.use(addUserContext);
 
+// Development authentication bypass (only in development)
+if (process.env.NODE_ENV === 'development') {
+  const { devAuthBypass } = require('./middleware/dev-auth');
+  app.use(devAuthBypass);
+}
+
 // Mount routes
 app.use('/auth', authRoutes);
 app.use('/api/goals', goalRoutes);

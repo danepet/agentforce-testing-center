@@ -5,6 +5,7 @@ let testSessions = [];
 let projects = [];
 let currentProject = null;
 let activeBatchRun = null;
+let currentUser = null;
 
 // Goal templates for easy getting started
 const goalTemplates = {
@@ -90,8 +91,93 @@ const goalTemplates = {
     }
 };
 
-document.addEventListener('DOMContentLoaded', function() {
-    loadProjects();
+// Authentication functions
+async function checkAuthStatus() {
+    try {
+        const response = await fetch('/auth/status', { credentials: 'include' });
+        const data = await response.json();
+        
+        if (data.authenticated) {
+            currentUser = data.user;
+            showAuthenticatedState();
+            return true;
+        } else {
+            currentUser = null;
+            showUnauthenticatedState();
+            return false;
+        }
+    } catch (error) {
+        console.error('Error checking auth status:', error);
+        showUnauthenticatedState();
+        return false;
+    }
+}
+
+function showAuthenticatedState() {
+    const authLoading = document.getElementById('auth-loading');
+    const authLogin = document.getElementById('auth-login');
+    const authUser = document.getElementById('auth-user');
+    
+    authLoading.style.display = 'none';
+    authLogin.style.display = 'none';
+    authUser.style.display = 'block';
+    
+    const userAvatar = document.getElementById('user-avatar');
+    const userName = document.getElementById('user-name');
+    
+    if (currentUser.picture) {
+        userAvatar.src = currentUser.picture;
+        userAvatar.style.display = 'block';
+    } else {
+        userAvatar.style.display = 'none';
+    }
+    
+    userName.textContent = currentUser.name || currentUser.email;
+}
+
+function showUnauthenticatedState() {
+    const authLoading = document.getElementById('auth-loading');
+    const authLogin = document.getElementById('auth-login');
+    const authUser = document.getElementById('auth-user');
+    
+    authLoading.style.display = 'none';
+    authLogin.style.display = 'block';
+    authUser.style.display = 'none';
+}
+
+function login() {
+    window.location.href = '/auth/google';
+}
+
+async function logout() {
+    try {
+        const response = await fetch('/auth/logout', { 
+            method: 'POST', 
+            credentials: 'include' 
+        });
+        
+        if (response.ok) {
+            currentUser = null;
+            showUnauthenticatedState();
+            // Clear projects and show empty state
+            projects = [];
+            displayProjects();
+        } else {
+            console.error('Logout failed');
+        }
+    } catch (error) {
+        console.error('Error logging out:', error);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', async function() {
+    // Check authentication first
+    const isAuthenticated = await checkAuthStatus();
+    
+    // Only load data if authenticated
+    if (isAuthenticated) {
+        loadProjects();
+    }
     
     const projectForm = document.getElementById('projectForm');
     if (projectForm) {
@@ -101,6 +187,19 @@ document.addEventListener('DOMContentLoaded', function() {
     const addGoalForm = document.getElementById('addGoalForm');
     if (addGoalForm) {
         addGoalForm.addEventListener('submit', handleAddGoalSubmit);
+    }
+    
+    // Check for authentication success redirect
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('auth') === 'success') {
+        // Remove auth parameter from URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+        // Reload authentication status
+        checkAuthStatus().then(isAuth => {
+            if (isAuth) {
+                loadProjects();
+            }
+        });
     }
 });
 
