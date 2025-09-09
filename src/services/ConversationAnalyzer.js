@@ -7,12 +7,13 @@ class ConversationAnalyzer {
         console.log('OPENAI_API_KEY length:', apiKey ? apiKey.length : 0);
         
         if (!apiKey) {
-            throw new Error('OPENAI_API_KEY environment variable is required but not set');
+            console.warn('⚠️  OPENAI_API_KEY not set - AI features will be disabled');
+            this.openai = null;
+        } else {
+            this.openai = new OpenAI({
+                apiKey: apiKey
+            });
         }
-        
-        this.openai = new OpenAI({
-            apiKey: apiKey
-        });
     }
 
     /**
@@ -33,6 +34,10 @@ class ConversationAnalyzer {
      * Use AI to analyze conversation data in any format
      */
     async analyzeConversationWithAI(conversationId, conversationData) {
+        if (!this.openai) {
+            throw new Error('OpenAI API key not configured - cannot analyze conversations');
+        }
+        
         try {
             const prompt = `
             Analyze this customer service conversation and extract key insights:
@@ -101,6 +106,10 @@ class ConversationAnalyzer {
      * Generate test goals from analyzed conversation
      */
     async generateGoalFromConversation(conversationAnalysis, conversation, project = null) {
+        if (!this.openai) {
+            throw new Error('OpenAI API key not configured - cannot generate goals');
+        }
+        
         try {
             const prompt = this.buildGoalGenerationPrompt(conversationAnalysis, conversation, project);
             
