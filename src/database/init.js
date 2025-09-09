@@ -73,6 +73,8 @@ const initializeTables = () => {
         miaw_org_id TEXT,
         miaw_deployment_name TEXT,
         miaw_base_url TEXT,
+        miaw_routing_attributes TEXT,
+        goal_generation_prompt TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
@@ -98,9 +100,9 @@ const initializeTables = () => {
           db.run(`ALTER TABLE projects ADD COLUMN miaw_org_id TEXT`, () => {});
           db.run(`ALTER TABLE projects ADD COLUMN miaw_deployment_name TEXT`, () => {});
           db.run(`ALTER TABLE projects ADD COLUMN miaw_base_url TEXT`, () => {});
+          db.run(`ALTER TABLE projects ADD COLUMN miaw_routing_attributes TEXT`, () => {});
           
-          // Add new enhancement columns
-          db.run(`ALTER TABLE projects ADD COLUMN goal_generation_prompt TEXT`, () => {});
+          // Add new enhancement columns (goal_generation_prompt now in main table creation)
           db.run(`ALTER TABLE test_sessions ADD COLUMN end_reason TEXT`, () => {});
           db.run(`ALTER TABLE test_sessions ADD COLUMN miaw_session_id TEXT`, () => {});
           db.run(`ALTER TABLE goals ADD COLUMN source_conversation_id TEXT`, () => {});
