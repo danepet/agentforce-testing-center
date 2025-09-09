@@ -1,14 +1,18 @@
 # Use Node.js LTS version
 FROM node:18-alpine
 
+# Install build dependencies for SQLite3
+RUN apk add --no-cache python3 make g++ sqlite
+
 # Set working directory
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies (without postinstall script)
-RUN npm ci --omit=dev --ignore-scripts
+# Install dependencies and rebuild SQLite3 for Alpine
+RUN npm ci --omit=dev --ignore-scripts && \
+    npm rebuild sqlite3
 
 # Copy application code
 COPY . .
