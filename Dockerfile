@@ -1,8 +1,13 @@
 # Use Node.js LTS version
-FROM node:18-alpine
+FROM node:18-slim
 
-# Install build dependencies for SQLite3
-RUN apk add --no-cache python3 make g++ sqlite
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -10,9 +15,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies and rebuild SQLite3 for Alpine
-RUN npm ci --omit=dev --ignore-scripts && \
-    npm rebuild sqlite3
+# Install dependencies
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy application code
 COPY . .
@@ -23,11 +27,8 @@ RUN mkdir -p data uploads
 # Initialize database
 RUN npm run init-db
 
-# Expose port
-EXPOSE 3000
-
 # Set production environment
 ENV NODE_ENV=production
 
 # Start the application
-CMD ["npm", "start"]
+CMD ["node", "src/server.js"]
