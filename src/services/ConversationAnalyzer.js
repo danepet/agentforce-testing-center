@@ -2,8 +2,16 @@ const OpenAI = require('openai');
 
 class ConversationAnalyzer {
     constructor() {
+        const apiKey = process.env.OPENAI_API_KEY;
+        console.log('OPENAI_API_KEY present:', !!apiKey);
+        console.log('OPENAI_API_KEY length:', apiKey ? apiKey.length : 0);
+        
+        if (!apiKey) {
+            throw new Error('OPENAI_API_KEY environment variable is required but not set');
+        }
+        
         this.openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY
+            apiKey: apiKey
         });
     }
 
