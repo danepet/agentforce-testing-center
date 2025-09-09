@@ -41,6 +41,8 @@ const initializeTables = () => {
         salesforce_data_after TEXT,
         validation_results TEXT,
         score REAL,
+        end_reason TEXT,
+        miaw_session_id TEXT,
         started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         completed_at DATETIME,
         FOREIGN KEY (goal_id) REFERENCES goals (id),
