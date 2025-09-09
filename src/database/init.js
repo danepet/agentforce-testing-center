@@ -14,6 +14,17 @@ const db = new sqlite3.Database(dbPath);
 const initializeTables = () => {
   return new Promise((resolve, reject) => {
     db.serialize(() => {
+      // Users table for authentication
+      db.run(`CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        google_id TEXT UNIQUE NOT NULL,
+        email TEXT NOT NULL,
+        name TEXT NOT NULL,
+        picture TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+
       db.run(`CREATE TABLE IF NOT EXISTS goals (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -71,6 +82,7 @@ const initializeTables = () => {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT,
+        user_id TEXT NOT NULL,
         created_by TEXT,
         tags TEXT,
         status TEXT DEFAULT 'active',
@@ -80,7 +92,22 @@ const initializeTables = () => {
         miaw_routing_attributes TEXT,
         goal_generation_prompt TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id)
+      )`);
+
+      // Project sharing table
+      db.run(`CREATE TABLE IF NOT EXISTS project_shares (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        permission_level TEXT DEFAULT 'read',
+        shared_by TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (project_id) REFERENCES projects (id),
+        FOREIGN KEY (user_id) REFERENCES users (id),
+        FOREIGN KEY (shared_by) REFERENCES users (id),
+        UNIQUE(project_id, user_id)
       )`);
 
 
@@ -105,6 +132,7 @@ const initializeTables = () => {
           db.run(`ALTER TABLE projects ADD COLUMN miaw_deployment_name TEXT`, () => {});
           db.run(`ALTER TABLE projects ADD COLUMN miaw_base_url TEXT`, () => {});
           db.run(`ALTER TABLE projects ADD COLUMN miaw_routing_attributes TEXT`, () => {});
+          db.run(`ALTER TABLE projects ADD COLUMN user_id TEXT`, () => {});
           
           // Add new enhancement columns (goal_generation_prompt now in main table creation)
           db.run(`ALTER TABLE test_sessions ADD COLUMN end_reason TEXT`, () => {});

@@ -6,6 +6,7 @@ class Project {
     this.id = data.id || uuidv4();
     this.name = data.name;
     this.description = data.description;
+    this.userId = data.userId || data.user_id;
     this.createdBy = data.createdBy || data.created_by;
     this.tags = data.tags;
     this.status = data.status || 'active';
@@ -23,14 +24,15 @@ class Project {
     
     return new Promise((resolve, reject) => {
       const stmt = db.prepare(`
-        INSERT INTO projects (id, name, description, created_by, tags, status, miaw_org_id, miaw_deployment_name, miaw_base_url, miaw_routing_attributes, goal_generation_prompt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO projects (id, name, description, user_id, created_by, tags, status, miaw_org_id, miaw_deployment_name, miaw_base_url, miaw_routing_attributes, goal_generation_prompt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
       stmt.run([
         project.id,
         project.name,
         project.description,
+        project.userId,
         project.createdBy,
         JSON.stringify(project.tags || []),
         project.status,
@@ -74,6 +76,73 @@ class Project {
             return project;
           });
           resolve(projects);
+        }
+      });
+    });
+  }
+
+  static async findByUserId(userId) {
+    const ProjectShare = require('./ProjectShare');
+    
+    return new Promise((resolve, reject) => {
+      // Get projects owned by user
+      db.all(`
+        SELECT p.*, 
+               COUNT(g.id) as goal_count,
+               COUNT(CASE WHEN g.enabled = 1 THEN 1 END) as enabled_goals,
+               'owner' as user_role
+        FROM projects p
+        LEFT JOIN goals g ON p.id = g.project_id
+        WHERE p.user_id = ? AND p.status = 'active'
+        GROUP BY p.id
+        ORDER BY p.created_at DESC
+      `, [userId], async (err, ownedRows) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        try {
+          // Get projects shared with user
+          const sharedProjects = await ProjectShare.findByUserId(userId);
+          const sharedProjectIds = sharedProjects.map(s => s.project_id);
+          
+          let sharedRows = [];
+          if (sharedProjectIds.length > 0) {
+            const placeholders = sharedProjectIds.map(() => '?').join(',');
+            sharedRows = await new Promise((resolve, reject) => {
+              db.all(`
+                SELECT p.*, 
+                       COUNT(g.id) as goal_count,
+                       COUNT(CASE WHEN g.enabled = 1 THEN 1 END) as enabled_goals,
+                       ps.permission_level as user_role
+                FROM projects p
+                LEFT JOIN goals g ON p.id = g.project_id
+                LEFT JOIN project_shares ps ON p.id = ps.project_id AND ps.user_id = ?
+                WHERE p.id IN (${placeholders}) AND p.status = 'active'
+                GROUP BY p.id
+                ORDER BY p.created_at DESC
+              `, [userId, ...sharedProjectIds], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows);
+              });
+            });
+          }
+
+          // Combine and format results
+          const allRows = [...ownedRows, ...sharedRows];
+          const projects = allRows.map(row => {
+            const project = new Project(row);
+            project.tags = JSON.parse(row.tags || '[]');
+            project.goalCount = row.goal_count;
+            project.enabledGoals = row.enabled_goals;
+            project.userRole = row.user_role;
+            return project;
+          });
+          
+          resolve(projects);
+        } catch (error) {
+          reject(error);
         }
       });
     });

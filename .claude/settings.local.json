@@ -25,7 +25,11 @@
       "Bash(sed:*)",
       "Bash(pkill:*)",
       "Bash(touch:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(gh repo create:*)",
+      "Bash(railway login:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
